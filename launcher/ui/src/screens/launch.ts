@@ -1,13 +1,15 @@
-// Launch stage: the hero card has morphed into the full window. launch_game runs, and the stage
-// follows the boot (game://boot: the phase in words and the real shader count, on its one status
-// line) until the game is on screen, then gives way to "running". game://exited brings us back.
+// Launch stage: the hero's art, title and Play have travelled into the full window, Play becoming a
+// horizon of light. launch_game runs, and the stage follows the boot (game://boot: the phase in
+// words and the real shader count, on its one status line) while the horizon rises, until the game
+// is on screen; then light floods the window and falls away to "running". game://exited brings us back.
 
 import { api, errorText, events } from "../api";
 import { h } from "../dom";
 import { exitCode } from "../format";
 import { setPadSuspended } from "../gamepad";
 import { focusFirst } from "../input";
-import { reducedMotion, setPaused, wait } from "../motion";
+import { pinLight, setSkyLevel } from "../light";
+import { isPaused, reducedMotion, setPaused, wait } from "../motion";
 import { go, type ScreenDef } from "../router";
 import { recordSession } from "../sessions";
 import type { BootProgress, Game, GameExited } from "../types";
@@ -79,7 +81,15 @@ const screen: ScreenDef = {
     const blackout = h("div", { class: "blackout", "aria-hidden": "true" });
     const eyebrow = h("p", { class: "eyebrow launch-eyebrow", text: "Starting" });
     const body = h("div", { class: "launch-body" }, eyebrow, title, status, actions);
-    const el = h("div", { class: "launch is-starting" }, art, body, blackout);
+
+    // The horizon: a line of light across the window that rises as the boot goes on (transform only,
+    // on its own layer). Play's slab of light becomes it when the stage opens from the hero.
+    const band = h("div", { class: "horizon-band" }, h("span", { class: "horizon-line" }));
+    const horizon = h("div", { class: "horizon", "aria-hidden": "true" }, h("div", { class: "horizon-glow" }), band, h("div", { class: "horizon-fill" }));
+    if (ctx.params.morph === true) band.style.setProperty("view-transition-name", "play-light");
+    // When the game is ready, light floods the window white-gold and falls away to black.
+    const flood = h("div", { class: "flood", "aria-hidden": "true" });
+    const el = h("div", { class: "launch is-starting" }, horizon, art, body, flood, blackout);
 
     let phase: Phase = "starting";
     let enteredResolve: () => void = () => undefined;
@@ -89,6 +99,7 @@ const screen: ScreenDef = {
     ctx.onEntered(() => {
       art.style.removeProperty("view-transition-name");
       title.style.removeProperty("view-transition-name");
+      band.style.removeProperty("view-transition-name");
       enteredResolve();
     });
     // Back and tab switching do nothing while the game starts or runs.
@@ -96,7 +107,49 @@ const screen: ScreenDef = {
     ctx.onLeave(() => {
       setPadSuspended(false);
       setPaused("game", false);
+      clearInterval(creepTimer);
+      pinLight(null);
+      setSkyLevel(1, 900);
     });
+
+    // ---- Rise: 0 is the horizon low at the foot of the window, 1 is the game ready.
+    // Each boot phase sets a floor; between events the light creeps toward the next floor, so it
+    // never stands still and never claims more than the boot has said.
+    let rise = 0;
+    let ceiling = 0.16;
+    const setRise = (p: number, next = ceiling) => {
+      rise = Math.max(rise, Math.min(1, p));
+      ceiling = Math.max(rise, next);
+      horizon.style.transform = `translateY(${((0.86 - 0.56 * rise) * 100).toFixed(2)}%)`;
+      pinLight({ x: 0.5, y: 0.86 - 0.56 * rise, w: 0.8 });
+    };
+    setRise(0.04);
+    setSkyLevel(0.7, 1400);
+    const creepTimer = setInterval(() => {
+      if (phase !== "starting" || isPaused() || reducedMotion()) return;
+      const gap = ceiling - rise;
+      if (gap > 0.004) setRise(rise + gap * 0.12);
+    }, 1600);
+    const FLOORS: Partial<Record<BootProgress["phase"], [number, number]>> = {
+      starting: [0.06, 0.16],
+      loading: [0.18, 0.27],
+      launching: [0.84, 0.91],
+      "first-frame": [0.93, 0.97],
+      shown: [1, 1],
+    };
+    const riseFor = (b: BootProgress) => {
+      if ((b.phase === "shaders" || b.phase === "precache") && b.total > 0) {
+        const f = Math.min(1, b.done / b.total);
+        setRise(0.28 + 0.52 * f, 0.28 + 0.52 * Math.min(1, f + 0.08));
+        return;
+      }
+      if (b.phase === "shaders" || b.phase === "precache") {
+        setRise(0.28, 0.5);
+        return;
+      }
+      const floor = FLOORS[b.phase];
+      if (floor) setRise(floor[0], floor[1]);
+    };
 
     // game://boot: the stage holds until the game is on screen, and hands over anyway after the
     // HOLD_* times without news, as it did before the emulator reported its boot.
@@ -113,12 +166,14 @@ const screen: ScreenDef = {
       if (text) statusText.textContent = text;
       const counted = (b.phase === "shaders" || b.phase === "precache") && b.total > 0;
       countText.textContent = counted ? `${count(b.done)} of ${count(b.total)}` : "";
+      riseFor(b);
     };
 
     const fail = (message: string) => {
       clearTimeout(holdTimer);
       countText.textContent = "";
       phase = "failed";
+      clearInterval(creepTimer);
       setPaused("game", false);
       setPadSuspended(false);
       el.classList.remove("is-starting", "is-handoff", "is-playing");
@@ -156,12 +211,15 @@ const screen: ScreenDef = {
       if (ctx.signal.aborted || phase !== "starting") return;
       clearTimeout(holdTimer);
       // Behind the game's window the dimming would play unseen: straight to "running" then.
+      // In front of it, the horizon reaches the top, the light floods the window white-gold and
+      // falls away to black (1.2 s, transform and opacity only).
       if (!sawWindow) {
         phase = "handoff";
         statusText.textContent = "Handing over to the game window…";
         countText.textContent = "";
+        setRise(1);
         el.classList.replace("is-starting", "is-handoff");
-        await wait(reducedMotion() ? 0 : 1000);
+        await wait(reducedMotion() ? 0 : 1200);
         if (phase !== "handoff") return;
       }
       phase = "playing";

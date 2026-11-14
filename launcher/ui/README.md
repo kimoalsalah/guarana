@@ -54,7 +54,8 @@ src/
   input.ts            intent layer (keyboard + pad), spatial navigation, moving focus halo
   gamepad.ts          Gamepad API polling, per-pad layouts, button glyphs, rumble
   motion.ts           reduced motion, view transitions, pause switch, idle scheduling
-  theme.ts            dark by default, light on request, circular reveal
+  light.ts            the sky: a small aurora canvas, its lean toward the focus, the glass edges
+  theme.ts            Night by default, Dawn (light) on request, circular reveal
   markdown.ts         minimal safe Markdown -> DOM (no innerHTML of data)
   sessions.ts         last-played times and last applied profile (localStorage)
   format.ts, dom.ts, icons.ts
@@ -77,16 +78,22 @@ src/
 | Doctor | `run_doctor`, `apply_fix`, `ask_ai` (the `install_update` fix shows its `install://progress` on the button) | `doctor://progress`, `install://progress` |
 | Report | `ask_ai`, `collect_report {kind, note}`, `open_path`, `open_url` | |
 
-Home has one ember button, Play. Below the hero come the mode card (when keys are imported), the
-library, then "This PC": the Game Booster as a folded card that shows its current level, and the
-controllers and setup cards. The share prompt, when offered, sits under the hero with a secondary
-Share button. First run is Scan and then Home in Auto mode, so the top bar says "Set up" without a
-step count; Scan's Continue unlocks once the device and the files are known, and Health finishes in
-the background. The launch stage shows the title and one status line with a spinner: the boot phase
-from `game://boot` in words, with the real shader count after it while shaders load (no bar). It
-holds until the game is on screen, then shows the game's title followed by "is running" on black;
-when it hands over after a hold time without news, the launcher knows only that the process
-started, not that the game has drawn a frame.
+Home opens on a title card set straight on the sky: the game's title large and light, a credit line
+of the profile's highlights, and one control made of light, Play; the key art floats to the right
+as a sculpture of light (the drop, its streaks as light trails, the echo arcs as rings). Below it
+come the share prompt when offered (a secondary Share button), the mode card (when keys are
+imported), the library, then "This PC": the Game Booster as a folded card that shows its current
+level, and the controllers and setup cards, all on glass. First run is Scan and then Home in Auto
+mode, so the top bar says "Set up" without a step count; Scan's Continue unlocks once the device
+and the files are known, and Health finishes in the background. Pressing Play sends the art, the
+title and Play itself into the launch stage, where Play stretches into a horizon of light. The
+stage shows the title and one status line with a small comet: the boot phase from `game://boot` in
+words, with the real shader count after it while shaders load, and the horizon rises with the
+phases (each phase sets a floor; between events it creeps toward the next one, never past what the
+boot has said). It holds until the game is on screen; when it hands over in view, light floods the
+window white-gold and falls away to black with the game's title followed by "is running"; when it
+hands over after a hold time without news, the launcher knows only that the process started, not
+that the game has drawn a frame.
 
 Every listener is registered before the command that streams, and removed when its screen goes.
 Links never navigate the webview: `https://` links go through `open_url`, nothing else opens.
@@ -105,35 +112,89 @@ the boot mark.
 The mock mirrors the backend: the same profiles and toggles as `src-tauri/src/profiles.rs`, the
 contract's check and fix ids in order, and the stage names of every progress event.
 
-## Design tokens
+## Design: light as material
 
-All in `src/styles/tokens.css`. Brand values come from `assets/brand` and `site/assets/site.css`.
+The window is a night sky with a slow aurora of ember and violet light (`src/light.ts`). Panels are
+thin sheets of glass that catch that light at their edges. The one action colour is light itself,
+white-gold with ember at its foot. Focus is a travelling spotlight, and the sky leans toward it.
+Titles are large and light, labels small and widely tracked, like a film's title cards. Motion is
+slow, weightless and continuous: no overshoot anywhere, nothing snaps.
 
-| Token | Dark (default) | Light | Use |
+All tokens are in `src/styles/tokens.css`. Brand values come from `assets/brand`.
+
+| Token | Night (default) | Dawn (`data-theme="light"`) | Use |
 |---|---|---|---|
-| `--ember-1` / `--ember-2` | `#FFC94A` / `#F2851A` | same | brand gradient (`--grad-ember`): primary buttons, Play, selection |
-| `--leaf`, `--echo` | `#3CCF7E`, `#F59E0B` | same | logo leaf, echo arcs |
-| `--bg` | `#070B14` night blue | `#F7F5F0` paper | page |
-| `--surface` / `-2` / `-3` | `#0E1527` / `#141D33` / `#1B2640` | `#FFF` / `#F4F2ED` / `#EBE7DF` | cards, controls |
-| `--text` / `--text-2` / `--muted` | `#EEF1F6` / `#C2C9D6` / `#8F99AD` | `#16181D` / `#434954` / `#5C626D` | text |
-| `--accent` | `#FBBF24` | `#A8510A` | links, focus, kickers (the site's accents, 4.5:1 on their backgrounds) |
-| `--ok` `--warn` `--fail` `--info` | green, orange, red, violet tints | darker shades | status, always with an icon and a word |
+| `--light` / `-2` / `-3`, `--grad-light` | `#FFF4DE` / `#FFD99A` / `#FFB15A` | same, deeper gradient | the primary action (Play, Continue, Set up), selection, the focus spotlight, the horizon |
+| `--ember-1` / `--ember-2`, `--leaf`, `--echo` | `#FFC94A` / `#F2851A`, `#3CCF7E`, `#F59E0B` | same | the drop, its leaf and echo arcs |
+| `--bg` | `#05050B` | `#F6F0E9` | under the sky canvas |
+| `--glass` / `--glass-2` | indigo at 58 / 62 % | white at 60 / 74 % | panels over the sky (`.card`, `.glass`) |
+| `--rim`, `--rim-ember`, `--rim-violet` | hairline, and the two lights an edge can catch | darker hairline | panel edges |
+| `--surface` / `-2` / `-3` | `#121027` / `#19163A` / `#241F4A` | `#FFFDFA` / `#F7F2EC` / `#ECE4DB` | opaque things: fields, code, toasts |
+| `--text` / `--text-2` / `--muted` | `#F6F1EA` / `#D2CBDC` / `#B0A9C2` | `#1A1624` / `#433C52` / `#5B546A` | text |
+| `--accent` | `#FFD08F` | `#8C3C02` | links, kickers |
+| `--halo`, `--halo-glow` | `#FFE8C2`, warm glow | `#8C3C02`, ember glow | the focus spotlight |
+| `--ok` `--warn` `--fail` `--info` | light tints | deep shades | status, always with an icon and a word |
 
-The night stages (Welcome, the game hero, Launch) stay dark in both themes.
+Text sits straight on the sky (the hero, screen heads, the footer), so `light.ts` caps the night sky
+at 0.04 relative luminance and floors the dawn sky at 0.66, per pixel of its small canvas. Measured on
+the brightest point of the night sky: text 10.4:1, text-2 7.4:1, muted 5.2:1; on the darkest point
+of dawn: text 12:1, muted 4.9:1, the status shades 4.8:1 or more. The intro and the launch stage
+stay night in both themes.
 
-- Type: system fonts only (`Segoe UI Variable` on Windows 11), like the site. Sizes `--fs-xs` 12 px to `--fs-3xl` 44 px; headings use the display cut, weight 750-800, tight tracking.
-- Space: 4 px grid (`--sp-1` 4 px … `--sp-12` 48 px). Radius: `--r-sm` 8, `--r-md` 14, `--r-lg` 20, `--r-xl` 28, `--r-pill`.
-- Motion: `--dur-1/2/3` 150/200/250 ms for micro-interactions, `--dur-screen` 420 ms, `--dur-hero` 700 ms. `--ease-spring` (3 % overshoot) and `--ease-bounce` (12 %) are sampled damped springs in CSS `linear()`, with cubic-bezier fallbacks; `--ease-emph` for large morphs.
+- Type: system fonts only (`Segoe UI Variable` on Windows 11). Titles use the display cut at weight
+  300 (`--fw-title`) and `--fs-title` (up to 4.4 rem); captions, tabs, labels and badges are
+  small capitals tracked at `--track-caps` (0.26 em). Body text stays at 400.
+- Space: 4 px grid (`--sp-1` 4 px … `--sp-16` 64 px). Radius: `--r-sm` 8, `--r-md` 12, `--r-btn` 14,
+  `--r-lg` 20, `--r-xl` 28. Only switches are pills.
+- Motion: `--dur-1/2/3` 220/320/460 ms, `--dur-screen` 640 ms, `--dur-hero` 1100 ms. `--ease-out`
+  is a long weightless glide; `--ease-spring` and `--ease-bounce` keep their names but no longer
+  overshoot; `--ease-drift` for ambient movement.
+- Glass edges: every `.card` and `.glass` has two rings of light on its edge (`::before` ember,
+  `::after` violet, a masked 1 px ring). `light.ts` sets their strength (`--lit-a`, `--lit-b`) from
+  how close the ember and violet light are, twice a second, quantised to tenths, so an edge repaints
+  only when the light has really moved; the change itself is a 1.8 s opacity transition. A panel that
+  holds the focus catches full light.
 
 ## Motion and performance rules
 
-- Everything that loops or covers a large area animates `transform` and `opacity` only: the intro's layers, beam, embers and grain, the key art's echo arcs and glow, screen transitions, skeleton shimmer.
-- Nothing decorative loops while the player is only looking. The intro's stars, haze and grain run a few cycles and come to rest on their base frame while Set up waits. The hero's echo arcs pulse three times when Home opens, then rest. The launch stage's art holds still, so the spinner next to the status line is the only thing that moves while a game starts. Spinners, skeletons and progress bars run only while something is loading. Small one-off transitions also touch other properties (the focus halo's size, the segmented thumb's width, the progress ring's stroke, button shadows and colours), and the intro paints three small things once (the drop's path, the streak masks, the wordmark's light sweep). Bloom and grain are pre-made textures; nothing uses a live `filter: blur` or `backdrop-filter`.
-- One pause switch: while a game runs or the window is hidden, `html[data-paused]` stops every CSS animation and the pad loop stops; while the window is unfocused, ambient loops (`.ambient`) and pad polling stop.
-- Gamepad polling runs only with a pad connected and the window focused, and is suspended from `launch_game` until `game://exited`, so in-game presses never reach the launcher.
-- Screens are separate chunks loaded with `import()`; Home is preloaded while Scan runs; the library list and the Markdown renderer load when needed; the mock is its own chunk.
-- Screen changes use the View Transitions API: slides for forward and back, a short slide for tabs, the hero card's art and title (or only the pressed library row's title) morph into the full-window launch stage, which follows the boot until the game is on screen; it dims to black over one second only when it hands over without the emulator's window having taken the foreground (otherwise the dimming would play unseen behind the game), and its animations pause as soon as that window is in front. The intro's logo flies into the top bar's mark when you press Set up.
-- Reduced motion (the system setting or `?motion=reduce`): the intro shows its final frame, transitions are instant, nothing loops.
+- The sky is a 160 px wide canvas the browser stretches over the window; a frame is a redraw of
+  about 16 000 pixels on the CPU and one small texture upload, never a full-window paint. It runs at
+  most 24 frames a second, and not at all while a game runs, the window is hidden or unfocused, a
+  view transition plays, under reduced motion (one still frame), or after 45 s without input (it
+  settles; the next input wakes it). A static noise tile on `#app`, painted once, keeps the stretched
+  gradients from banding.
+- Everything else that moves animates `transform` and `opacity`: screen transitions, the hero's
+  arrival, the echo ripples, Play's sheen, the horizon, the flood, the intro's spark, line, trails,
+  letters and drop. Small one-off transitions also touch other properties (the focus halo's size,
+  the segmented thumb's width, the progress ring's stroke, button shadows). The intro paints two small
+  things once (the drop's path, the streak masks). Real blur (`backdrop-filter`) is used only on
+  small panels: toasts and the Help menu.
+- Nothing decorative loops while the player is only looking. On Home the echo arcs ripple three
+  times and the drop's core breathes twice, Play's sheen crosses twice, then everything rests. The
+  launch stage's art holds still: the horizon and the small comet by the status line are what move,
+  and the horizon jumps instead of gliding while `data-paused` is set. Spinners, skeletons and
+  progress bars run only while something is loading.
+- One pause switch: while a game runs or the window is hidden, `html[data-paused]` stops every CSS
+  animation, the sky and the pad loop; while the window is unfocused, the sky, ambient loops
+  (`.ambient`) and pad polling stop.
+- Gamepad polling runs only with a pad connected and the window focused, and is suspended from
+  `launch_game` until `game://exited`, so in-game presses never reach the launcher.
+- Screens are separate chunks loaded with `import()`; Home is preloaded while Scan runs; the library
+  list and the Markdown renderer load when needed; the mock is its own chunk.
+- Screen changes use the View Transitions API: the old view lifts away and the new one settles in
+  (forward and back), a drift for tabs. Play sends the hero's art, its title and Play itself into the
+  full-window launch stage (`hero-art`, `hero-title`, `play-light`; from a library row only the
+  title travels). The stage follows the boot until the game is on screen; the flood plays only when
+  it hands over without the emulator's window having taken the foreground (otherwise it would play
+  unseen behind the game), and its animations pause as soon as that window is in front. The intro's
+  logo flies into the top bar's mark when you press Set up. The theme switch spreads from its button.
+- Reduced motion (the system setting or `?motion=reduce`): the sky is one still frame, the intro
+  shows its final frame, transitions are instant, the horizon jumps, the hand-over skips the flood,
+  nothing loops.
+
+To watch the launch sequence in the browser: `?mock=ready&boot=none` shows the horizon creeping and,
+after 20 s, the flood and the fall to black; `?mock=ready&speed=4` slows the boot phases down (the
+stage holds still once the emulator's window takes the foreground, as it does for real).
 
 ## Controllers and keyboard
 

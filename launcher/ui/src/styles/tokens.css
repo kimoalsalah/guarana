@@ -1,5 +1,8 @@
-/* Design tokens. Dark ("night stage") is the default on :root; light is opt-in via data-theme.
-   Brand values come from assets/brand (ember gradient, leaf, echo) and site/assets/site.css. */
+/* Design tokens: "Light as material".
+   The window is a night sky (src/light.ts draws its aurora); panels are thin sheets of glass that
+   catch that light at their edges; the one action colour is light itself, white-gold, with the
+   brand's ember inside it. Night is the default; Dawn (data-theme="light") is the same idea by day.
+   Brand values come from assets/brand: ember #FFC94A to #F2851A, leaf, echo. */
 
 :root {
   color-scheme: dark;
@@ -10,61 +13,88 @@
   --echo: #f59e0b;
   --leaf: #3ccf7e;
   --ink: #0f1218;
-  --night: #070b14;
-  --on-ember: #1a1204;
+  --night: #05050b;
   --grad-ember: linear-gradient(135deg, var(--ember-1) 0%, var(--ember-2) 100%);
 
-  /* Surfaces */
-  --bg: #070b14;
-  --bg-glow-1: rgba(52, 86, 178, 0.24);
-  --bg-glow-2: rgba(255, 176, 32, 0.08);
-  --surface: #0e1527;
-  --surface-2: #141d33;
-  --surface-3: #1b2640;
-  --surface-hover: #172038;
-  --border: rgba(148, 163, 184, 0.14);
-  --border-strong: rgba(148, 163, 184, 0.28);
+  /* Light, the material: white-gold at its brightest, ember where it is deep */
+  --light: #fff4de;
+  --light-2: #ffd99a;
+  --light-3: #ffb15a;
+  --violet: #8f73ff;
+  --violet-2: #b9a6ff;
+  --on-light: #1d1306;
+  --grad-light: linear-gradient(180deg, #fff8ea 0%, #ffe2ae 46%, #ffbb6a 100%);
+  --glow-light: 0 0 0 1px rgba(255, 244, 222, 0.55) inset, 0 14px 44px -12px rgba(255, 168, 76, 0.62), 0 0 64px -18px rgba(255, 214, 150, 0.7);
+  --glow-light-hi: 0 0 0 1px rgba(255, 250, 238, 0.75) inset, 0 18px 56px -12px rgba(255, 168, 76, 0.8), 0 0 90px -16px rgba(255, 220, 160, 0.85);
 
-  /* Text */
-  --text: #eef1f6;
-  --text-2: #c2c9d6;
-  --muted: #8f99ad;
+  /* Sky and glass */
+  --bg: #05050b;
+  --glass: rgba(18, 15, 36, 0.58);
+  --glass-2: rgba(30, 26, 56, 0.62);
+  --glass-hover: rgba(255, 246, 232, 0.06);
+  --glass-press: rgba(255, 246, 232, 0.1);
+  --glass-blur: blur(18px) saturate(1.35);
+  --rim: rgba(255, 238, 214, 0.1);
+  --rim-ember: rgba(255, 196, 120, 0.85);
+  --rim-violet: rgba(160, 136, 255, 0.75);
+  /* Opaque steps, for fields, toasts and anything that must not let the sky through */
+  --surface: #121027;
+  --surface-2: #19163a;
+  --surface-3: #241f4a;
+  --surface-hover: #1c1940;
+  --border: rgba(255, 238, 214, 0.1);
+  --border-strong: rgba(255, 238, 214, 0.2);
 
-  /* Accent (links, focus, selected): the site's dark accent */
-  --accent: #fbbf24;
-  --accent-2: #fcd34d;
-  --accent-soft: rgba(251, 191, 36, 0.13);
-  --halo: #ffc94a;
+  /* Text. light.ts caps the sky at 0.04 relative luminance, so straight on its brightest point:
+     text 10.4:1, text-2 7.4:1, muted 5.2:1 (Dawn floors the sky at 0.66: text 12:1, muted 4.9:1). */
+  --text: #f6f1ea;
+  --text-2: #d2cbdc;
+  --muted: #b0a9c2;
 
-  /* Status: always paired with an icon and a word */
-  --ok: #4ade80;
-  --ok-bg: rgba(74, 222, 128, 0.12);
-  --warn: #fdba74;
-  --warn-bg: rgba(253, 186, 116, 0.13);
-  --fail: #fca5a5;
-  --fail-bg: rgba(248, 113, 113, 0.15);
-  --info: #c4b5fd;
-  --info-bg: rgba(196, 181, 253, 0.13);
+  /* Accent: warm light for links, kickers, selection */
+  --accent: #ffd08f;
+  --accent-2: #ffe4bd;
+  --accent-soft: rgba(255, 208, 143, 0.12);
+  --halo: #ffe8c2;
+  --halo-glow: rgba(255, 196, 120, 0.5);
 
-  /* Depth */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px -16px rgba(0, 0, 0, 0.7);
-  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 28px 60px -24px rgba(0, 0, 0, 0.8);
-  --glow-ember: 0 12px 34px -12px rgba(242, 133, 26, 0.7);
-  --skeleton: rgba(148, 163, 184, 0.1);
-  --skeleton-hi: rgba(148, 163, 184, 0.2);
-  --scrim: rgba(7, 11, 20, 0.78);
+  /* Status: always an icon and a word as well */
+  --ok: #86e8b0;
+  --ok-bg: rgba(134, 232, 176, 0.12);
+  --warn: #ffc988;
+  --warn-bg: rgba(255, 201, 136, 0.12);
+  --fail: #ffa8a8;
+  --fail-bg: rgba(255, 140, 140, 0.13);
+  --info: #c9baff;
+  --info-bg: rgba(201, 186, 255, 0.12);
 
-  /* Type: system fonts only (Segoe UI Variable on Windows 11), like the site */
+  /* Depth: light, not shadow. Shadows only seat a panel; the glow is what lifts it. */
+  --shadow-1: 0 18px 50px -30px rgba(0, 0, 0, 0.8);
+  --shadow-2: 0 30px 80px -36px rgba(0, 0, 0, 0.9);
+  --glow-ember: 0 14px 40px -14px rgba(255, 168, 76, 0.55);
+  --skeleton: rgba(255, 238, 214, 0.07);
+  --skeleton-hi: rgba(255, 238, 214, 0.16);
+  --scrim: rgba(5, 5, 11, 0.78);
+  --noise: none;
+
+  /* Type: system fonts only (Segoe UI Variable on Windows 11). Titles are large and light, like a
+     film's title cards; labels are small and widely tracked. */
   --font: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, SFMono-Regular, Menlo, monospace;
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
   --fs-md: 1rem;
   --fs-lg: 1.125rem;
   --fs-xl: 1.375rem;
-  --fs-2xl: 2rem;
-  --fs-3xl: 2.75rem;
+  --fs-2xl: 2.25rem;
+  --fs-3xl: 3rem;
+  --fs-title: clamp(2.6rem, 4.6vw, 4.4rem);
+  --fw-title: 300;
+  --fw-label: 600;
+  --track-title: -0.012em;
+  --track-caps: 0.26em;
+  --track-label: 0.04em;
 
   /* Space: 4 px grid */
   --sp-1: 4px;
@@ -76,89 +106,98 @@
   --sp-8: 32px;
   --sp-10: 40px;
   --sp-12: 48px;
+  --sp-16: 64px;
 
-  /* Radius */
+  /* Radius: glass sheets have soft corners; nothing is a pill except a switch */
   --r-sm: 8px;
-  --r-md: 14px;
+  --r-md: 12px;
+  --r-btn: 14px;
   --r-lg: 20px;
   --r-xl: 28px;
   --r-pill: 999px;
 
-  /* Motion: 150-250 ms for micro-interactions, springs for anything that moves */
-  --dur-1: 150ms;
-  --dur-2: 200ms;
-  --dur-3: 250ms;
-  --dur-screen: 420ms;
-  --dur-hero: 700ms;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
-  --ease-emph: cubic-bezier(0.2, 0, 0, 1);
-  /* Fallbacks for engines without linear(); replaced below. */
-  --ease-spring: cubic-bezier(0.3, 1.25, 0.5, 1);
-  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion: slow, weightless, continuous. No overshoot anywhere; things arrive and settle. */
+  --dur-1: 220ms;
+  --dur-2: 320ms;
+  --dur-3: 460ms;
+  --dur-screen: 640ms;
+  --dur-hero: 1100ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-emph: cubic-bezier(0.22, 0.9, 0.18, 1);
+  --ease-drift: cubic-bezier(0.45, 0, 0.2, 1);
+  /* The old spring names, kept for the components that use them: now weightless glides. */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.2, 0.9, 0.25, 1);
 }
 
-@supports (transition-timing-function: linear(0, 1)) {
-  :root {
-    /* Damped springs (zeta 0.75: 3% overshoot; zeta 0.55: 12%), sampled from the closed form. */
-    --ease-spring: linear(0, 0.095 5%, 0.294 10%, 0.508 15%, 0.693 20%, 0.833 25%, 0.928 30%, 0.986 35%, 1.015 40%, 1.027 45%, 1.028 50%, 1.024 55%, 1.018 60%, 1.012 65%, 1.007 70%, 1.004 75%, 1.001 80%, 1);
-    --ease-bounce: linear(0, 0.141 5%, 0.432 10%, 0.727 15%, 0.95 20%, 1.078 25%, 1.124 30%, 1.117 35%, 1.083 40%, 1.045 45%, 1.013 50%, 0.994 55%, 0.985 60%, 0.984 65%, 0.988 70%, 0.993 75%, 0.997 80%, 1);
-  }
-}
-
-/* The night stages (intro, game hero, launch) stay dark in both themes: their controls use dark tokens. */
+/* The cinematic stages (intro, launch) stay night in both themes: their controls use night tokens. */
 .intro,
-.hero,
 .launch {
   color-scheme: dark;
-  --surface: #0e1527;
-  --surface-2: #141d33;
-  --surface-3: #1b2640;
-  --surface-hover: #172038;
-  --border: rgba(148, 163, 184, 0.14);
-  --border-strong: rgba(148, 163, 184, 0.28);
-  --text: #eef1f6;
-  --text-2: #c2c9d6;
-  --muted: #8f99ad;
-  --accent: #fbbf24;
-  --accent-2: #fcd34d;
-  --accent-soft: rgba(251, 191, 36, 0.13);
-  --halo: #ffc94a;
-  --ok: #4ade80;
-  --fail: #fca5a5;
-  --glow-ember: 0 12px 34px -12px rgba(242, 133, 26, 0.7);
+  --glass: rgba(18, 15, 36, 0.58);
+  --glass-2: rgba(30, 26, 56, 0.62);
+  --glass-hover: rgba(255, 246, 232, 0.06);
+  --glass-press: rgba(255, 246, 232, 0.1);
+  --rim: rgba(255, 238, 214, 0.1);
+  --surface: #121027;
+  --surface-2: #19163a;
+  --surface-3: #241f4a;
+  --surface-hover: #1c1940;
+  --border: rgba(255, 238, 214, 0.1);
+  --border-strong: rgba(255, 238, 214, 0.2);
+  --text: #f6f1ea;
+  --text-2: #d2cbdc;
+  --muted: #b0a9c2;
+  --accent: #ffd08f;
+  --accent-2: #ffe4bd;
+  --accent-soft: rgba(255, 208, 143, 0.12);
+  --halo: #ffe8c2;
+  --halo-glow: rgba(255, 196, 120, 0.5);
+  --ok: #86e8b0;
+  --fail: #ffa8a8;
 }
 
+/* Dawn: a pearl sky with peach and lavender light; glass is frosted white; light is deep ember. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f7f5f0;
-  --bg-glow-1: rgba(110, 140, 230, 0.14);
-  --bg-glow-2: rgba(255, 176, 32, 0.16);
-  --surface: #ffffff;
-  --surface-2: #f4f2ed;
-  --surface-3: #ebe7df;
-  --surface-hover: #faf8f4;
-  --border: #e4e0d8;
-  --border-strong: #cdc7bb;
-  --text: #16181d;
-  --text-2: #434954;
-  --muted: #5c626d;
-  --accent: #a8510a;
-  --accent-2: #8a420a;
-  --accent-soft: rgba(168, 81, 10, 0.1);
-  --halo: #d97706;
-  --ok: #05744f;
-  --ok-bg: #e6f6ef;
-  --warn: #9a3412;
-  --warn-bg: #fff1e6;
-  --fail: #b42318;
-  --fail-bg: #fdecea;
-  --info: #6a2fd0;
-  --info-bg: #f1ecfd;
-  --shadow-1: 0 1px 2px rgba(22, 24, 29, 0.06), 0 10px 28px -16px rgba(22, 24, 29, 0.22);
-  --shadow-2: 0 2px 8px rgba(22, 24, 29, 0.08), 0 28px 60px -24px rgba(22, 24, 29, 0.3);
-  --glow-ember: 0 12px 30px -14px rgba(194, 96, 10, 0.55);
-  --skeleton: rgba(22, 24, 29, 0.06);
-  --skeleton-hi: rgba(22, 24, 29, 0.12);
-  --scrim: rgba(247, 245, 240, 0.85);
+  --bg: #f6f0e9;
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-2: rgba(255, 255, 255, 0.74);
+  --glass-hover: rgba(60, 30, 90, 0.05);
+  --glass-press: rgba(60, 30, 90, 0.09);
+  --rim: rgba(70, 40, 90, 0.12);
+  --rim-ember: rgba(230, 128, 40, 0.75);
+  --rim-violet: rgba(120, 90, 230, 0.6);
+  --surface: #fffdfa;
+  --surface-2: #f7f2ec;
+  --surface-3: #ece4db;
+  --surface-hover: #fbf7f2;
+  --border: rgba(60, 36, 80, 0.12);
+  --border-strong: rgba(60, 36, 80, 0.24);
+  --text: #1a1624;
+  --text-2: #433c52;
+  --muted: #5b546a;
+  --accent: #8c3c02;
+  --accent-2: #6f2f00;
+  --accent-soft: rgba(176, 82, 10, 0.1);
+  --halo: #8c3c02;
+  --halo-glow: rgba(230, 128, 40, 0.38);
+  --grad-light: linear-gradient(180deg, #fff6e6 0%, #ffd596 48%, #f7a347 100%);
+  --glow-light: 0 0 0 1px rgba(160, 80, 10, 0.28) inset, 0 12px 34px -14px rgba(214, 110, 20, 0.55), 0 0 50px -20px rgba(255, 170, 80, 0.6);
+  --glow-light-hi: 0 0 0 1px rgba(160, 80, 10, 0.4) inset, 0 16px 44px -14px rgba(214, 110, 20, 0.7), 0 0 70px -18px rgba(255, 170, 80, 0.75);
+  --ok: #04613f;
+  --ok-bg: rgba(4, 97, 63, 0.1);
+  --warn: #8f3a0a;
+  --warn-bg: rgba(200, 100, 20, 0.12);
+  --fail: #ad1f16;
+  --fail-bg: rgba(200, 40, 30, 0.1);
+  --info: #5a28c0;
+  --info-bg: rgba(110, 60, 220, 0.1);
+  --shadow-1: 0 18px 44px -30px rgba(60, 30, 80, 0.35);
+  --shadow-2: 0 28px 70px -36px rgba(60, 30, 80, 0.45);
+  --glow-ember: 0 12px 30px -14px rgba(194, 96, 10, 0.5);
+  --skeleton: rgba(60, 36, 80, 0.07);
+  --skeleton-hi: rgba(60, 36, 80, 0.14);
+  --scrim: rgba(246, 240, 233, 0.85);
 }

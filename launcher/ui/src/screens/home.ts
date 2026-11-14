@@ -1,5 +1,6 @@
-// Home, Ocarina-first: a hero card for Ocarina of Time with one big Play, the mode, the rest of the
-// library (lazy), then "This PC" (Booster, controllers, setup). Warms the shader cache once, in the background.
+// Home, Ocarina-first: a title card for Ocarina of Time set straight on the sky, its art a sculpture
+// of light and one Play made of light; then the mode, the rest of the library (lazy), and "This PC"
+// (Booster, controllers, setup) on glass. Warms the shader cache once, in the background.
 
 import { api, errorText, events } from "../api";
 import { h } from "../dom";
@@ -218,15 +219,21 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
     attrs: { "aria-describedby": "hero-title" },
     onClick: () => {
       rumble(60);
+      // The art, the title and Play itself travel into the launch stage: Play's slab of light
+      // stretches into the horizon that rises while the game boots.
       art.style.setProperty("view-transition-name", "hero-art");
       title.style.setProperty("view-transition-name", "hero-title");
+      play.style.setProperty("view-transition-name", "play-light");
       void go("launch", { params: { game: oot, profileId, morph: true }, transition: "launch" }).catch((e: unknown) => {
         art.style.removeProperty("view-transition-name");
         title.style.removeProperty("view-transition-name");
+        play.style.removeProperty("view-transition-name");
         toast(errorText(e), { tone: "fail" });
       });
     },
   });
+  // A sheen of light crosses Play twice as Home opens, then it rests.
+  play.classList.add("is-arriving");
 
   // "Prepare shaders" (warm_shaders). While this title's shaders build, from here or the automatic
   // run after a driver change, Play waits: the backend refuses to start the same title meanwhile.
