@@ -1,6 +1,8 @@
-// Launch stage: the hero card has morphed into the full window. launch_game runs, and the stage
-// follows the boot (game://boot: the phase in words and the real shader count, on its one status
-// line) until the game is on screen, then gives way to "running". game://exited brings us back.
+// Launch stage: the interface has folded into the seed, which now sits alone on black. launch_game
+// runs, and the stage follows the boot (game://boot): each phase blooms as a ring around the seed,
+// and while shaders load their real count settles onto the third ring as sparks. The status line
+// says the phase in words. When the game is on screen the rings fall into the seed, the iris opens
+// and its black takes the window: the game has it now. game://exited brings us back.
 
 import { api, errorText, events } from "../api";
 import { h } from "../dom";
@@ -12,8 +14,8 @@ import { go, type ScreenDef } from "../router";
 import { recordSession } from "../sessions";
 import type { BootProgress, Game, GameExited } from "../types";
 import { icon } from "../icons";
-import { button, spinner } from "../ui/controls";
-import { heroArt } from "../ui/hero-art";
+import { button } from "../ui/controls";
+import { orbit, seed } from "../ui/seed";
 
 type Phase = "starting" | "handoff" | "playing" | "failed" | "done";
 
@@ -54,6 +56,27 @@ function bootText(b: BootProgress): string | null {
   }
 }
 
+/** Which ring a boot phase lights: 0 start, 1 load, 2 shaders, 3 the game itself. */
+function ringOf(b: BootProgress): number | null {
+  switch (b.phase) {
+    case "starting":
+      return 0;
+    case "loading":
+      return 1;
+    case "shaders":
+    case "precache":
+      return 2;
+    case "launching":
+    case "first-frame":
+    case "shown":
+      return 3;
+    default:
+      return null;
+  }
+}
+
+const PHASE_NAMES = ["Start", "Load", "Shaders", "Game"];
+
 const screen: ScreenDef = {
   title: "Starting",
   chrome: "none",
@@ -63,32 +86,55 @@ const screen: ScreenDef = {
     const profileId = (ctx.params.profileId as string | null | undefined) ?? undefined;
     // A file opened from Explorer or a guarana:// link: started by its path, which may be outside the library.
     const byPath = ctx.params.byPath === true;
-    const art = heroArt({ cls: "launch-art" });
+
+    const theSeed = seed({ size: "launch", state: "open" });
+    const rings = orbit();
+    theSeed.el.appendChild(rings.el);
+    // It arrives as Home's seed left it: wide with interest. It relaxes once it has landed.
+    theSeed.dilate(1.3);
     const title = h("h1", { class: "launch-title", text: game?.title ?? "Game" });
-    // From the hero both morph; from a library row only the title does (that page has no hero art).
-    if (ctx.params.morph === true) art.style.setProperty("view-transition-name", "hero-art");
+    // From Home the seed and the title both fly here; from a library row the title always does.
+    if (ctx.params.morph === true) theSeed.el.style.setProperty("view-transition-name", "seed");
     if (ctx.params.morph === true || ctx.params.morph === "title") title.style.setProperty("view-transition-name", "hero-title");
+
     // One line of what is happening: the boot phase in words (game://boot), and while shaders load
-    // their real count after it. A small spinner says the line is live; the text changes when the
-    // phase does. The count changes every percent, so it sits outside the live region: screen
-    // readers hear the phases, not every number.
+    // their real count after it. The count changes every percent, so it sits outside the live
+    // region: screen readers hear the phases, not every number. The rings are the same story drawn.
     const statusText = h("span", { role: "status", text: "Starting Guarana…" });
     const countText = h("span", { class: "launch-count" });
-    const status = h("p", { class: "launch-status" }, spinner("launch-spin"), statusText, countText);
+    const status = h("p", { class: "launch-status" }, statusText, countText);
+    const phaseItems = PHASE_NAMES.map((name) => h("li", { class: "launch-phase" }, h("span", { class: "launch-phase-dot" }), name));
+    const phases = h("ol", { class: "launch-phases", "aria-hidden": "true" }, phaseItems);
     const actions = h("div", { class: "launch-actions" });
-    const blackout = h("div", { class: "blackout", "aria-hidden": "true" });
     const eyebrow = h("p", { class: "eyebrow launch-eyebrow", text: "Starting" });
-    const body = h("div", { class: "launch-body" }, eyebrow, title, status, actions);
-    const el = h("div", { class: "launch is-starting" }, art, body, blackout);
+    const body = h("div", { class: "launch-body" }, eyebrow, title, status, phases, actions);
+    // The iris: a black disc on the seed's pupil that opens until it holds the whole window.
+    const iris = h("div", { class: "seed-void", "aria-hidden": "true" });
+    const el = h("div", { class: "launch is-starting" }, h("div", { class: "launch-glow", "aria-hidden": "true" }), h("div", { class: "launch-seed" }, theSeed.el), body, iris);
 
     let phase: Phase = "starting";
+    let ringIndex = -1;
+    const showRing = (i: number) => {
+      if (i < ringIndex) return;
+      ringIndex = i;
+      rings.phase(i);
+      phaseItems.forEach((li, j) => {
+        li.classList.toggle("is-done", j < i);
+        li.classList.toggle("is-now", j === i);
+      });
+    };
+
     let enteredResolve: () => void = () => undefined;
     const entered = new Promise<void>((resolve) => {
       enteredResolve = () => resolve();
     });
     ctx.onEntered(() => {
-      art.style.removeProperty("view-transition-name");
+      theSeed.el.style.removeProperty("view-transition-name");
       title.style.removeProperty("view-transition-name");
+      if (phase === "starting") {
+        theSeed.dilate(1);
+        showRing(Math.max(0, ringIndex));
+      }
       enteredResolve();
     });
     // Back and tab switching do nothing while the game starts or runs.
@@ -111,8 +157,11 @@ const screen: ScreenDef = {
     const showBoot = (b: BootProgress) => {
       const text = bootText(b);
       if (text) statusText.textContent = text;
+      const ring = ringOf(b);
+      if (ring !== null) showRing(ring);
       const counted = (b.phase === "shaders" || b.phase === "precache") && b.total > 0;
       countText.textContent = counted ? `${count(b.done)} of ${count(b.total)}` : "";
+      if (counted) rings.particles(b.done, b.total);
     };
 
     const fail = (message: string) => {
@@ -123,6 +172,10 @@ const screen: ScreenDef = {
       setPadSuspended(false);
       el.classList.remove("is-starting", "is-handoff", "is-playing");
       el.classList.add("is-failed");
+      // The fruit closes and the rings go dark: nothing is spinning for a launch that is over.
+      rings.fail();
+      theSeed.setState("shut");
+      theSeed.dilate(1);
       eyebrow.replaceChildren(icon("fail"), "Didn't start");
       statusText.textContent = message;
       actions.replaceChildren(
@@ -140,6 +193,8 @@ const screen: ScreenDef = {
       setPadSuspended(false);
       if (game.title_id) recordSession(game.title_id, e.seconds);
       if (e.code !== 0 && early) {
+        iris.classList.remove("is-on", "is-open");
+        iris.style.transform = "";
         fail(`${game.title} closed while starting (exit code ${exitCode(e.code)}). The log is in the report.`);
         return;
       }
@@ -152,18 +207,44 @@ const screen: ScreenDef = {
       return el;
     }
 
+    /** The iris opens: a black disc grows from the pupil until it covers the window (one transform). */
+    const openIris = () => {
+      const p = theSeed.pupil.getBoundingClientRect();
+      const d = Math.max(8, p.width);
+      const cx = p.left + p.width / 2;
+      const cy = p.top + p.height / 2;
+      const far = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy));
+      iris.style.left = `${(cx - d / 2).toFixed(1)}px`;
+      iris.style.top = `${(cy - d / 2).toFixed(1)}px`;
+      iris.style.width = iris.style.height = `${d.toFixed(1)}px`;
+      iris.classList.add("is-on");
+      void iris.offsetWidth;
+      // The disc's solid core is 56 % of its radius; the rest is a soft edge that sweeps outward.
+      iris.style.transform = `scale(${((far * 2) / (0.56 * d)).toFixed(2)})`;
+      iris.classList.add("is-open");
+    };
+
     const handOver = async () => {
       if (ctx.signal.aborted || phase !== "starting") return;
       clearTimeout(holdTimer);
-      // Behind the game's window the dimming would play unseen: straight to "running" then.
+      const quick = reducedMotion() || sawWindow;
+      // Everything falls into the seed and it opens wide.
+      showRing(3);
+      rings.release();
+      theSeed.setState("wide");
+      theSeed.dilate(2.05);
+      countText.textContent = "";
       if (!sawWindow) {
+        // Behind the game's window this would play unseen: it only waits when the stage is in front.
         phase = "handoff";
         statusText.textContent = "Handing over to the game window…";
-        countText.textContent = "";
         el.classList.replace("is-starting", "is-handoff");
-        await wait(reducedMotion() ? 0 : 1000);
-        if (phase !== "handoff") return;
       }
+      await wait(quick ? 0 : 420);
+      if (phase !== "handoff" && phase !== "starting") return;
+      openIris();
+      await wait(quick ? 0 : 640);
+      if (phase !== "handoff" && phase !== "starting") return;
       phase = "playing";
       el.classList.remove("is-starting", "is-handoff");
       el.classList.add("is-playing");

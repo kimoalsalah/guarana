@@ -14,7 +14,7 @@ import { launcher, library, profiles, warmStatus } from "../state";
 import type { BoosterStatus, Game, LauncherState, ModeId, ModeStatus, Profile, ShareStatus, UpdateInfo, WarmResult } from "../types";
 import { badge, busy, button, card, segmented, skeleton, spinner, switchControl } from "../ui/controls";
 import { controllersCard } from "../ui/controllers-card";
-import { heroArt } from "../ui/hero-art";
+import { seed, type Seed } from "../ui/seed";
 import { toast, type Tone } from "../ui/toast";
 
 // Prefetch (prefetch_caches: shader cache files into the OS file cache) once per session, per title.
@@ -71,27 +71,38 @@ const screen: ScreenDef = {
   tab: "home",
 
   render(ctx) {
+    const exited = ctx.params.exited as { code: number; seconds: number; title: string } | undefined;
+    // The seed: the heart of Home. Half-awake while the library loads; it opens when the game is
+    // ready (back from a game, it wakes up), stays closed until the keys are in, and shuts on an error.
+    const theSeed = seed({ size: "stage", state: exited ? "closed" : "drowsy", follow: true, breathe: true, echoes: true });
     const heroSlot = h("div", { class: "hero-slot" }, heroPlaceholder());
     const setupSlot = h("div", { class: "setup-slot" }, card("Your setup", { icon: "shield" }, skeleton([80, 60, 70])));
     const libTitle = h("h2", { class: "section-title", id: "lib-title", text: "Library" });
     const libBody = h("div", { class: "library-body" }, skeleton([55, 40, 48], "skeleton-tall"));
-    const libSection = h("section", { class: "library", "aria-labelledby": "lib-title" }, h("div", { class: "section-head" }, libTitle), libBody);
+    const libSection = h("section", { class: "home-act library", "aria-labelledby": "lib-title" }, h("div", { class: "section-head" }, libTitle), libBody);
 
     const modeSlot = h("div", { class: "mode-slot" });
     const boosterSlot = h("div", { class: "booster-slot" });
     const shareSlot = shareCard(ctx);
-    // One primary action: the game and Play first, then the mode and the library. The PC's own cards
-    // (Booster, controllers, setup) sit below, quieter, under one heading.
+    // The game is the stage: the seed, the title and Play, and how it runs. Everything else is
+    // below it, quieter: the rest of the library, then the PC's own panes (Booster, controllers, setup).
+    const stage = h(
+      "div",
+      { class: "home-stage" },
+      h("div", { class: "stage-seed" }, theSeed.el),
+      h("div", { class: "stage-copy" }, heroSlot, modeSlot),
+      shareSlot,
+      h("p", { class: "stage-cue", "aria-hidden": "true" }, h("span", { text: "Library and this PC" }), icon("chevronDown")),
+    );
     const pcSection = h(
       "section",
-      { class: "home-pc", "aria-labelledby": "pc-title" },
+      { class: "home-act home-pc", "aria-labelledby": "pc-title" },
       h("div", { class: "section-head" }, h("h2", { class: "section-title", id: "pc-title", text: "This PC" })),
       boosterSlot,
       h("div", { class: "home-grid" }, controllersCard(ctx.signal), setupSlot),
     );
-    const el = h("div", { class: "home" }, heroSlot, shareSlot, modeSlot, libSection, pcSection);
+    const el = h("div", { class: "home" }, stage, libSection, pcSection);
 
-    const exited = ctx.params.exited as { code: number; seconds: number; title: string } | undefined;
     if (exited) {
       setTimeout(() => {
         if (exited.code === 0) toast(`Welcome back. You played ${duration(exited.seconds)} of ${exited.title}.`, { tone: "ok" });
@@ -105,7 +116,10 @@ const screen: ScreenDef = {
 
     void (async () => {
       const loaded = await Promise.all([launcher.get(true), library.get(true)]).catch((e: unknown) => {
-        if (!ctx.signal.aborted) heroSlot.replaceChildren(errorHero(errorText(e)));
+        if (!ctx.signal.aborted) {
+          heroSlot.replaceChildren(errorHero(errorText(e)));
+          theSeed.setState("shut");
+        }
         return null;
       });
       if (!loaded) return;
@@ -118,7 +132,7 @@ const screen: ScreenDef = {
       const profile = profs.find((p) => p.id === profileId);
       const oot = games.find((g) => g.is_ocarina);
 
-      heroSlot.replaceChildren(renderHero(ctx, state, oot, profile, profileId));
+      heroSlot.replaceChildren(renderHero(ctx, theSeed, state, oot, profile, profileId, !!exited));
       if (state.keys_present || state.profile_id) {
         modeSlot.replaceChildren(modeCard(ctx));
         boosterSlot.replaceChildren(boosterCard(ctx));
@@ -128,7 +142,7 @@ const screen: ScreenDef = {
 
       const rest = oot && state.keys_present ? games.filter((g) => g !== oot) : games;
       libTitle.textContent = oot && state.keys_present ? "More games" : "Library";
-      renderLibrary(libSection, libBody, rest, state, profileId, ctx);
+      renderLibrary(libSection, libBody, rest, state, profileId, ctx, theSeed);
     })();
 
     return el;
@@ -137,11 +151,31 @@ const screen: ScreenDef = {
 
 export default screen;
 
+/** Where the interface folds to on Play: the seed's eye if it is on screen, else `fallback`. */
+function foldInto(theSeed: Seed, fallback?: HTMLElement): boolean {
+  const root = document.documentElement;
+  const main = document.getElementById("main")?.getBoundingClientRect();
+  const r = theSeed.el.getBoundingClientRect();
+  const visible = r.bottom > 40 && r.top < innerHeight - 40 && r.width > 0;
+  const at = visible ? { x: r.left + r.width * 0.56, y: r.top + r.height * 0.5 } : (() => {
+    const f = (fallback ?? theSeed.el).getBoundingClientRect();
+    return { x: f.left + Math.min(f.width / 2, 120), y: f.top + f.height / 2 };
+  })();
+  root.style.setProperty("--fold-x", `${Math.round(at.x)}px`);
+  root.style.setProperty("--fold-y", `${Math.round(at.y)}px`);
+  root.style.setProperty("--fold-ox", `${Math.round(main?.left ?? 0)}px`);
+  root.style.setProperty("--fold-oy", `${Math.round(main?.top ?? 0)}px`);
+  if (visible) {
+    theSeed.el.style.setProperty("view-transition-name", "seed");
+    theSeed.dilate(1.3);
+  }
+  return visible;
+}
+
 function heroPlaceholder(): HTMLElement {
   return h(
     "article",
     { class: "hero is-loading", "aria-busy": "true", "aria-label": "Loading your library" },
-    heroArt({ cls: "hero-art" }),
     h("div", { class: "hero-body" }, h("div", { class: "skeleton hero-skeleton" }, h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }))),
   );
 }
@@ -150,11 +184,10 @@ function errorHero(message: string): HTMLElement {
   return h(
     "article",
     { class: "hero hero-error" },
-    heroArt({ cls: "hero-art" }),
     h(
       "div",
       { class: "hero-body" },
-      h("p", { class: "eyebrow", text: "Something's off" }),
+      h("p", { class: "eyebrow" }, icon("fail"), "Something's off"),
       h("h1", { class: "hero-title hero-title-sm", text: "Your library didn't load" }),
       h("p", { class: "hero-meta", text: message }),
       h("div", { class: "hero-actions" }, button("Try again", { kind: "primary", size: "lg", icon: "refresh", primary: true, autofocus: true, onClick: () => void go("home", { replace: true, transition: "fade" }) })),
@@ -162,14 +195,13 @@ function errorHero(message: string): HTMLElement {
   );
 }
 
-function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefined, profile: Profile | undefined, profileId: string | null): HTMLElement {
-  const art = heroArt({ cls: "hero-art" });
-
+function renderHero(ctx: ScreenContext, theSeed: Seed, state: LauncherState, oot: Game | undefined, profile: Profile | undefined, profileId: string | null, waking: boolean): HTMLElement {
   if (!state.keys_present) {
+    // The fruit stays closed until the keys are in.
+    theSeed.setState("closed");
     return h(
       "article",
       { class: "hero hero-pending", "aria-labelledby": "hero-title" },
-      art,
       h(
         "div",
         { class: "hero-body" },
@@ -182,10 +214,10 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
   }
 
   if (!oot) {
+    theSeed.setState("drowsy");
     return h(
       "article",
       { class: "hero hero-pending", "aria-labelledby": "hero-title" },
-      art,
       h(
         "div",
         { class: "hero-body" },
@@ -197,6 +229,10 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
     );
   }
 
+  // Ready: the fruit splits open. Back from a game it was closed, so this reads as waking up.
+  if (waking) setTimeout(() => !ctx.signal.aborted && theSeed.setState("open"), 380);
+  else theSeed.setState("open");
+
   const title = h("h1", { class: "hero-title", id: "hero-title", text: oot.title });
   const session = lastSession(oot.title_id);
   const meta = session ? `Last played ${relativeTime(session.last)} · ${duration(session.seconds)}` : "Ready for your first session";
@@ -206,7 +242,7 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
     h("li", { class: "chip" }, icon("sliders"), profile ? profile.name : "No profile yet"),
     HIGHLIGHTS.filter((x) => toggleOn(profile, x.id))
       .slice(0, 3)
-      .map((x) => h("li", { class: "chip" }, icon("sparkle"), x.label)),
+      .map((x) => h("li", { class: "chip" }, icon("leaf"), x.label)),
   );
   const warmEl = h("span", { class: "warm", role: "status" });
   const play = button("Play", {
@@ -218,15 +254,26 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
     attrs: { "aria-describedby": "hero-title" },
     onClick: () => {
       rumble(60);
-      art.style.setProperty("view-transition-name", "hero-art");
+      // The interface folds into the seed, and the seed carries the launch.
+      const morphSeed = foldInto(theSeed);
       title.style.setProperty("view-transition-name", "hero-title");
-      void go("launch", { params: { game: oot, profileId, morph: true }, transition: "launch" }).catch((e: unknown) => {
-        art.style.removeProperty("view-transition-name");
+      void go("launch", { params: { game: oot, profileId, morph: morphSeed ? true : "title" }, transition: "launch" }).catch((e: unknown) => {
+        theSeed.el.style.removeProperty("view-transition-name");
+        theSeed.dilate(1);
         title.style.removeProperty("view-transition-name");
         toast(errorText(e), { tone: "fail" });
       });
     },
   });
+  // The seed notices Play: its echo arcs (predicted frames) slide out and the pupil widens.
+  const interested = (on: boolean) => {
+    theSeed.ready(on && !play.disabled);
+    theSeed.dilate(on && !play.disabled ? 1.16 : 1);
+  };
+  play.addEventListener("focus", () => interested(true));
+  play.addEventListener("blur", () => interested(false));
+  play.addEventListener("pointerenter", () => interested(true));
+  play.addEventListener("pointerleave", () => interested(document.activeElement === play));
 
   // "Prepare shaders" (warm_shaders). While this title's shaders build, from here or the automatic
   // run after a driver change, Play waits: the backend refuses to start the same title meanwhile.
@@ -276,7 +323,6 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
   const hero = h(
     "article",
     { class: "hero hero-ready", "aria-labelledby": "hero-title" },
-    art,
     h(
       "div",
       { class: "hero-body" },
@@ -356,7 +402,7 @@ function setupCard(state: LauncherState, profile: Profile | undefined, ctx: Scre
   return card("Your setup", { icon: "shield" }, rows);
 }
 
-function renderLibrary(section: HTMLElement, body: HTMLElement, games: Game[], state: LauncherState, profileId: string | null, ctx: ScreenContext): void {
+function renderLibrary(section: HTMLElement, body: HTMLElement, games: Game[], state: LauncherState, profileId: string | null, ctx: ScreenContext, theSeed: Seed): void {
   if (!games.length) {
     body.replaceChildren(
       h(
@@ -379,8 +425,12 @@ function renderLibrary(section: HTMLElement, body: HTMLElement, games: Game[], s
           // The row's title carries into the launch stage, like the hero's does.
           onPlay: (g, titleEl) => {
             rumble(60);
+            // Folds into the seed when it is on screen, else into the row itself.
+            const morphSeed = foldInto(theSeed, titleEl);
             titleEl.style.setProperty("view-transition-name", "hero-title");
-            void go("launch", { params: { game: g, profileId, morph: "title" }, transition: "launch" }).catch((e: unknown) => {
+            void go("launch", { params: { game: g, profileId, morph: morphSeed ? true : "title" }, transition: "launch" }).catch((e: unknown) => {
+              theSeed.el.style.removeProperty("view-transition-name");
+              theSeed.dilate(1);
               titleEl.style.removeProperty("view-transition-name");
               toast(errorText(e), { tone: "fail" });
             });
