@@ -148,9 +148,16 @@ function score(dir: Direction, a: DOMRect, b: DOMRect): number | null {
   return main + cross * 2.5 + align * 0.15;
 }
 
+let lastMoveAt = 0;
+
 export function focusElement(el: HTMLElement): void {
   el.focus({ preventScroll: true });
-  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
+  // Camera on rails: the first step glides, a held direction (repeats every 110 ms) tracks
+  // instantly, so smooth scrolls never queue up behind the focus.
+  const now = performance.now();
+  const repeating = now - lastMoveAt < 220;
+  lastMoveAt = now;
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reducedMotion() || repeating ? "auto" : "smooth" });
   refreshHalo();
 }
 
@@ -223,11 +230,37 @@ function clickPrimary(): void {
 
 // ---- Focus halo --------------------------------------------------------------------------------
 
+// The halo is a bracket: four corners, each moved by transform alone. On a move the corners travel
+// to the new control a little wide (TRAVEL px out), then clamp in to LOCK px: the "tick" of a
+// measuring jaw closing. Scrolls and resizes of the same control follow it without the clamp.
+
 let halo: HTMLDivElement | null = null;
+let corners: HTMLElement[] = [];
 let haloOn = false;
 let haloFrame = 0;
 let observed: Element | null = null;
+let lastTarget: Element | null = null;
+let lockTimer = 0;
+const TRAVEL = 9;
+const LOCK = 4;
+const CORNER = 12;
 const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => refreshHalo()) : null;
+
+function setCorners(r: DOMRect, pad: number): void {
+  const l = Math.round(r.left - pad);
+  const t = Math.round(r.top - pad);
+  const rr = Math.round(Math.max(r.left - pad, r.right + pad - CORNER));
+  const b = Math.round(Math.max(r.top - pad, r.bottom + pad - CORNER));
+  const pos = [
+    [l, t],
+    [rr, t],
+    [l, b],
+    [rr, b],
+  ];
+  corners.forEach((c, i) => {
+    c.style.transform = `translate(${pos[i][0]}px, ${pos[i][1]}px)`;
+  });
+}
 
 function placeHalo(): void {
   haloFrame = 0;
@@ -242,22 +275,37 @@ function placeHalo(): void {
   if (!show) {
     if (haloOn) halo.classList.remove("is-on");
     haloOn = false;
+    lastTarget = null;
     return;
   }
   const target = el as HTMLElement;
   const r = target.getBoundingClientRect();
-  const pad = 4;
-  const radius = parseFloat(getComputedStyle(target).borderTopLeftRadius) || 8;
-  if (!haloOn) halo.classList.add("no-anim");
-  halo.style.transform = `translate(${Math.round(r.left - pad)}px, ${Math.round(r.top - pad)}px)`;
-  halo.style.width = `${Math.round(r.width + pad * 2)}px`;
-  halo.style.height = `${Math.round(r.height + pad * 2)}px`;
-  halo.style.borderRadius = `${Math.min(radius + pad, (r.height + pad * 2) / 2)}px`;
-  halo.classList.add("is-on");
-  if (!haloOn) {
+  if (!haloOn || reducedMotion()) {
+    // Appearing: no travel, straight onto the control.
+    halo.classList.add("no-anim");
+    setCorners(r, LOCK);
+    halo.classList.add("is-on");
     void halo.offsetWidth;
     halo.classList.remove("no-anim");
+  } else if (target === lastTarget && !lockTimer) {
+    // Same control scrolled or resized: stay clamped and follow it exactly.
+    halo.classList.add("no-anim");
+    setCorners(r, LOCK);
+    void halo.offsetWidth;
+    halo.classList.remove("no-anim");
+  } else {
+    // A new control: travel wide, then clamp.
+    halo.classList.remove("is-lock");
+    setCorners(r, TRAVEL);
+    window.clearTimeout(lockTimer);
+    lockTimer = window.setTimeout(() => {
+      lockTimer = 0;
+      if (!halo || document.activeElement !== target) return;
+      halo.classList.add("is-lock");
+      setCorners(target.getBoundingClientRect(), LOCK);
+    }, 150);
   }
+  lastTarget = target;
   haloOn = true;
 }
 
@@ -267,9 +315,10 @@ export function refreshHalo(): void {
 
 function bump(dir: Direction): void {
   if (!halo || !haloOn || reducedMotion()) return;
-  const dx = dir === "left" ? -6 : dir === "right" ? 6 : 0;
-  const dy = dir === "up" ? -6 : dir === "down" ? 6 : 0;
-  halo.animate([{ translate: "0 0" }, { translate: `${dx}px ${dy}px` }, { translate: "0 0" }], { duration: 220, easing: "ease-out" });
+  // A hard stop: the bracket hits the edge and comes straight back.
+  const dx = dir === "left" ? -5 : dir === "right" ? 5 : 0;
+  const dy = dir === "up" ? -5 : dir === "down" ? 5 : 0;
+  halo.animate([{ translate: "0 0" }, { translate: `${dx}px ${dy}px`, offset: 0.4 }, { translate: "0 0" }], { duration: 160, easing: "linear" });
 }
 
 // ---- Wiring ------------------------------------------------------------------------------------
@@ -279,6 +328,12 @@ export function initInput(): void {
   halo = document.createElement("div");
   halo.id = "focus-halo";
   halo.setAttribute("aria-hidden", "true");
+  corners = ["tl", "tr", "bl", "br"].map((c) => {
+    const s = document.createElement("span");
+    s.className = `fh fh-${c}`;
+    return s;
+  });
+  halo.append(...corners);
   document.body.appendChild(halo);
 
   document.addEventListener("focusin", refreshHalo);

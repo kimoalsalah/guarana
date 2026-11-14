@@ -1,19 +1,20 @@
-// Launch stage: the hero card has morphed into the full window. launch_game runs, and the stage
-// follows the boot (game://boot: the phase in words and the real shader count, on its one status
-// line) until the game is on screen, then gives way to "running". game://exited brings us back.
+// Launch: the countdown instrument. The hero's title and pacing strip carry over; the measuring grid
+// sweeps in; each boot phase (game://boot) is a segment that locks into place; the real shader count
+// spins up on an odometer. At ready the instrument collapses to one line that opens like a shutter,
+// then gives way to "running". game://exited brings us back.
 
 import { api, errorText, events } from "../api";
 import { h } from "../dom";
 import { exitCode } from "../format";
 import { setPadSuspended } from "../gamepad";
 import { focusFirst } from "../input";
-import { reducedMotion, setPaused, wait } from "../motion";
+import { isPaused, onPauseChange, reducedMotion, setPaused, wait } from "../motion";
 import { go, type ScreenDef } from "../router";
 import { recordSession } from "../sessions";
 import type { BootProgress, Game, GameExited } from "../types";
 import { icon } from "../icons";
 import { button, spinner } from "../ui/controls";
-import { heroArt } from "../ui/hero-art";
+import { odometer } from "../ui/instrument";
 
 type Phase = "starting" | "handoff" | "playing" | "failed" | "done";
 
@@ -54,6 +55,30 @@ function bootText(b: BootProgress): string | null {
   }
 }
 
+/** The instrument's segments, in boot order. */
+const SEGMENTS = ["Start", "Load", "Shaders", "Launch", "First frame"];
+
+/** Which segment a boot phase is in; SEGMENTS.length when the game is on screen. */
+function segmentOf(phase: BootProgress["phase"]): number | null {
+  switch (phase) {
+    case "starting":
+      return 0;
+    case "loading":
+      return 1;
+    case "shaders":
+    case "precache":
+      return 2;
+    case "launching":
+      return 3;
+    case "first-frame":
+      return 4;
+    case "shown":
+      return 5;
+    default:
+      return null;
+  }
+}
+
 const screen: ScreenDef = {
   title: "Starting",
   chrome: "none",
@@ -63,31 +88,90 @@ const screen: ScreenDef = {
     const profileId = (ctx.params.profileId as string | null | undefined) ?? undefined;
     // A file opened from Explorer or a guarana:// link: started by its path, which may be outside the library.
     const byPath = ctx.params.byPath === true;
-    const art = heroArt({ cls: "launch-art" });
+
+    // ---- The measuring grid (sweeps in) and the shutter (plays at the hand-over).
+    const grid = h(
+      "div",
+      { class: "lx-grid", "aria-hidden": "true" },
+      Array.from({ length: 13 }, (_, i) => h("span", { class: "lx-v", style: { "--i": String(i), left: `${(i / 12) * 100}%` } })),
+      Array.from({ length: 7 }, (_, i) => h("span", { class: "lx-h", style: { "--i": String(i), top: `${(i / 6) * 100}%` } })),
+    );
+    const shutter = h("div", { class: "lx-shutter", "aria-hidden": "true" }, h("span", { class: "lx-line" }), h("span", { class: "lx-shut lx-shut-a" }), h("span", { class: "lx-shut lx-shut-b" }));
+
+    // ---- Head: what is happening, and a T+ clock.
+    const clock = h("span", { class: "lx-clock", "aria-hidden": "true", text: "T+00:00.0" });
+    const eyebrow = h("p", { class: "eyebrow launch-eyebrow", text: "Starting" });
     const title = h("h1", { class: "launch-title", text: game?.title ?? "Game" });
-    // From the hero both morph; from a library row only the title does (that page has no hero art).
-    if (ctx.params.morph === true) art.style.setProperty("view-transition-name", "hero-art");
+
+    // ---- The instrument: the shader counter and the five boot segments.
+    const shaders = odometer("0", { label: "shaders loaded" });
+    const total = h("span", { class: "lx-total" });
+    const counter = h(
+      "div",
+      { class: "lx-counter", hidden: true },
+      h("span", { class: "lx-count" }, shaders.el),
+      h("span", { class: "lx-of" }, total, h("span", { class: "readout-label", text: "Shaders" })),
+    );
+    const segs = SEGMENTS.map((label, i) =>
+      h(
+        "li",
+        { class: "lx-seg", "data-state": i === 0 ? "active" : "pending", style: { "--i": String(i) } },
+        h("span", { class: "lx-seg-bar" }, h("span", { class: "lx-seg-fill" }), h("span", { class: "lx-seg-scan" })),
+        h("span", { class: "lx-seg-label" }, h("span", { class: "lx-seg-n", text: String(i + 1).padStart(2, "0") }), label),
+      ),
+    );
+    const track = h("ol", { class: "lx-track", "aria-label": "Boot phases" }, segs);
+    const instrument = h("div", { class: "lx-instrument" }, counter, track);
+
+    // From the hero both morph (the strip becomes the instrument); from a library row only the title does.
+    if (ctx.params.morph === true) instrument.style.setProperty("view-transition-name", "hero-art");
     if (ctx.params.morph === true || ctx.params.morph === "title") title.style.setProperty("view-transition-name", "hero-title");
-    // One line of what is happening: the boot phase in words (game://boot), and while shaders load
-    // their real count after it. A small spinner says the line is live; the text changes when the
-    // phase does. The count changes every percent, so it sits outside the live region: screen
-    // readers hear the phases, not every number.
+
+    // One line of what is happening: the boot phase in words (game://boot). The shader count changes
+    // every percent, so it sits outside the live region: screen readers hear the phases, not every number.
     const statusText = h("span", { role: "status", text: "Starting Guarana…" });
-    const countText = h("span", { class: "launch-count" });
-    const status = h("p", { class: "launch-status" }, spinner("launch-spin"), statusText, countText);
+    const status = h("p", { class: "launch-status" }, spinner("launch-spin"), statusText);
     const actions = h("div", { class: "launch-actions" });
     const blackout = h("div", { class: "blackout", "aria-hidden": "true" });
-    const eyebrow = h("p", { class: "eyebrow launch-eyebrow", text: "Starting" });
-    const body = h("div", { class: "launch-body" }, eyebrow, title, status, actions);
-    const el = h("div", { class: "launch is-starting" }, art, body, blackout);
+    const body = h("div", { class: "launch-body" }, h("div", { class: "lx-head" }, eyebrow, clock), title, instrument, status, actions);
+    const el = h("div", { class: "launch is-starting" }, grid, body, shutter, blackout);
 
     let phase: Phase = "starting";
+    let stage = 0;
+    const setStage = (n: number) => {
+      if (n < stage) return;
+      stage = n;
+      segs.forEach((s, i) => {
+        s.dataset.state = i < n ? "done" : i === n ? "active" : "pending";
+      });
+    };
+
+    // ---- T+ clock: ten updates a second while the boot runs, none once the game has the GPU.
+    const t0 = performance.now();
+    let clockTimer = 0;
+    const tickClock = () => {
+      const s = (performance.now() - t0) / 1000;
+      const m = Math.floor(s / 60);
+      clock.textContent = `T+${String(m).padStart(2, "0")}:${(s - m * 60).toFixed(1).padStart(4, "0")}`;
+    };
+    const runClock = (on: boolean) => {
+      window.clearInterval(clockTimer);
+      clockTimer = 0;
+      if (on && phase === "starting" && !isPaused()) clockTimer = window.setInterval(tickClock, 100);
+    };
+    runClock(true);
+    const offPause = onPauseChange((paused) => runClock(!paused));
+    ctx.signal.addEventListener("abort", () => {
+      runClock(false);
+      offPause();
+    });
+
     let enteredResolve: () => void = () => undefined;
     const entered = new Promise<void>((resolve) => {
       enteredResolve = () => resolve();
     });
     ctx.onEntered(() => {
-      art.style.removeProperty("view-transition-name");
+      instrument.style.removeProperty("view-transition-name");
       title.style.removeProperty("view-transition-name");
       enteredResolve();
     });
@@ -111,17 +195,27 @@ const screen: ScreenDef = {
     const showBoot = (b: BootProgress) => {
       const text = bootText(b);
       if (text) statusText.textContent = text;
+      const seg = segmentOf(b.phase);
+      if (seg !== null) setStage(seg);
       const counted = (b.phase === "shaders" || b.phase === "precache") && b.total > 0;
-      countText.textContent = counted ? `${count(b.done)} of ${count(b.total)}` : "";
+      counter.hidden = !counted;
+      el.classList.toggle("is-counting", counted);
+      if (counted) {
+        const digits = String(b.total).length;
+        shaders.set(String(Math.min(b.done, b.total)).padStart(digits, "0"));
+        total.textContent = `/ ${count(b.total)}`;
+      }
     };
 
     const fail = (message: string) => {
       clearTimeout(holdTimer);
-      countText.textContent = "";
+      runClock(false);
       phase = "failed";
       setPaused("game", false);
       setPadSuspended(false);
-      el.classList.remove("is-starting", "is-handoff", "is-playing");
+      segs[Math.min(stage, segs.length - 1)].dataset.state = "fail";
+      counter.hidden = true;
+      el.classList.remove("is-starting", "is-handoff", "is-playing", "is-counting");
       el.classList.add("is-failed");
       eyebrow.replaceChildren(icon("fail"), "Didn't start");
       statusText.textContent = message;
@@ -155,17 +249,19 @@ const screen: ScreenDef = {
     const handOver = async () => {
       if (ctx.signal.aborted || phase !== "starting") return;
       clearTimeout(holdTimer);
-      // Behind the game's window the dimming would play unseen: straight to "running" then.
+      setStage(SEGMENTS.length);
+      // Behind the game's window the shutter would play unseen: straight to "running" then.
       if (!sawWindow) {
         phase = "handoff";
+        runClock(false);
         statusText.textContent = "Handing over to the game window…";
-        countText.textContent = "";
         el.classList.replace("is-starting", "is-handoff");
         await wait(reducedMotion() ? 0 : 1000);
         if (phase !== "handoff") return;
       }
       phase = "playing";
-      el.classList.remove("is-starting", "is-handoff");
+      runClock(false);
+      el.classList.remove("is-starting", "is-handoff", "is-counting");
       el.classList.add("is-playing");
       // "Running", not "Playing": after a HOLD_* time without news the launcher knows only that the
       // process started, not that a frame is up.

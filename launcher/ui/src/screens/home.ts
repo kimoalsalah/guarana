@@ -1,20 +1,21 @@
-// Home, Ocarina-first: a hero card for Ocarina of Time with one big Play, the mode, the rest of the
-// library (lazy), then "This PC" (Booster, controllers, setup). Warms the shader cache once, in the background.
+// Home, an instrument: the game's title set enormous, its frame pacing as the hero graphic (the
+// strip and the frames-on-time numeral), one ember Play. Then the mode, the library, and "This PC"
+// (Booster, controllers, setup). Warms the shader cache once, in the background.
 
 import { api, errorText, events } from "../api";
 import { h } from "../dom";
 import { duration, exitCode, relativeTime, v } from "../format";
-import { rumble } from "../gamepad";
+import { glyph, rumble } from "../gamepad";
 import { icon } from "../icons";
 import { settleFocus } from "../input";
 import { whenIdle } from "../motion";
 import { go, type ScreenContext, type ScreenDef } from "../router";
-import { lastSession } from "../sessions";
-import { launcher, library, profiles, warmStatus } from "../state";
+import { lastPacing, lastSession, recordPacing } from "../sessions";
+import { launcher, library, profiles, Signal, warmStatus } from "../state";
 import type { BoosterStatus, Game, LauncherState, ModeId, ModeStatus, Profile, ShareStatus, UpdateInfo, WarmResult } from "../types";
 import { badge, busy, button, card, segmented, skeleton, spinner, switchControl } from "../ui/controls";
 import { controllersCard } from "../ui/controllers-card";
-import { heroArt } from "../ui/hero-art";
+import { fixed1, odometer, pacingStrip, readout, type Pacing } from "../ui/instrument";
 import { toast, type Tone } from "../ui/toast";
 
 // Prefetch (prefetch_caches: shader cache files into the OS file cache) once per session, per title.
@@ -35,7 +36,10 @@ export function resetUpdateCheck(): void {
   document.querySelector('.tab[data-tab="updates"]')?.classList.remove("has-dot");
 }
 
-// Chips: the profile's switches that change how the game looks or paces, when they are on.
+/** The latest measured session the share offer reported, keyed by title id (or game name). */
+const pacingSeen = new Signal<{ key: string; p: Pacing } | null>(null);
+
+// Spec lines: the profile's switches that change how the game looks or paces, when they are on.
 const HIGHLIGHTS = [
   { id: "fluid_presenter", label: "Even frame pacing" },
   { id: "frame_generation", label: "Frame generation" },
@@ -65,6 +69,11 @@ function toggleOn(p: Profile | undefined, id: string): boolean {
   return p?.toggles.find((t) => t.id === id)?.value === true;
 }
 
+/** A numbered section head: "03 /" in the index rail, the title beside it. */
+function sectionHead(title: HTMLElement, extra?: HTMLElement): HTMLElement {
+  return h("div", { class: "section-head" }, h("span", { class: "idx-n", "aria-hidden": "true" }), title, extra ?? null);
+}
+
 const screen: ScreenDef = {
   title: "Home",
   chrome: "full",
@@ -72,22 +81,21 @@ const screen: ScreenDef = {
 
   render(ctx) {
     const heroSlot = h("div", { class: "hero-slot" }, heroPlaceholder());
-    const setupSlot = h("div", { class: "setup-slot" }, card("Your setup", { icon: "shield" }, skeleton([80, 60, 70])));
+    const setupSlot = h("div", { class: "setup-slot" }, card("Your setup", { icon: "shield", kicker: "Spec sheet" }, skeleton([80, 60, 70])));
     const libTitle = h("h2", { class: "section-title", id: "lib-title", text: "Library" });
     const libBody = h("div", { class: "library-body" }, skeleton([55, 40, 48], "skeleton-tall"));
-    const libSection = h("section", { class: "library", "aria-labelledby": "lib-title" }, h("div", { class: "section-head" }, libTitle), libBody);
+    const libSection = h("section", { class: "library home-section", "aria-labelledby": "lib-title" }, sectionHead(libTitle), libBody);
 
     const modeSlot = h("div", { class: "mode-slot" });
     const boosterSlot = h("div", { class: "booster-slot" });
     const shareSlot = shareCard(ctx);
-    // One primary action: the game and Play first, then the mode and the library. The PC's own cards
-    // (Booster, controllers, setup) sit below, quieter, under one heading.
+    // One primary action: the game and Play first, then the mode and the library. The PC's own panels
+    // (Booster, controllers, setup) sit below, under one heading.
     const pcSection = h(
       "section",
-      { class: "home-pc", "aria-labelledby": "pc-title" },
-      h("div", { class: "section-head" }, h("h2", { class: "section-title", id: "pc-title", text: "This PC" })),
-      boosterSlot,
-      h("div", { class: "home-grid" }, controllersCard(ctx.signal), setupSlot),
+      { class: "home-pc home-section", "aria-labelledby": "pc-title" },
+      sectionHead(h("h2", { class: "section-title", id: "pc-title", text: "This PC" })),
+      h("div", { class: "home-pc-body" }, boosterSlot, h("div", { class: "home-grid" }, controllersCard(ctx.signal), setupSlot)),
     );
     const el = h("div", { class: "home" }, heroSlot, shareSlot, modeSlot, libSection, pcSection);
 
@@ -137,79 +145,131 @@ const screen: ScreenDef = {
 
 export default screen;
 
+// ---- The hero instrument ----------------------------------------------------------------------------
+
+function heroFrame(cls: string, label: string, ...body: (HTMLElement | null)[]): HTMLElement {
+  return h(
+    "article",
+    { class: `hero ${cls}`, "aria-labelledby": "hero-title" },
+    h("div", { class: "hero-top" }, h("p", { class: "idx" }, h("span", { class: "idx-n", "aria-hidden": "true" }), h("span", { class: "idx-t", text: label }))),
+    ...body,
+  );
+}
+
 function heroPlaceholder(): HTMLElement {
   return h(
     "article",
     { class: "hero is-loading", "aria-busy": "true", "aria-label": "Loading your library" },
-    heroArt({ cls: "hero-art" }),
-    h("div", { class: "hero-body" }, h("div", { class: "skeleton hero-skeleton" }, h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }))),
+    h("div", { class: "skeleton hero-skeleton" }, h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" }), h("span", { class: "skeleton-line" })),
   );
 }
 
 function errorHero(message: string): HTMLElement {
-  return h(
-    "article",
-    { class: "hero hero-error" },
-    heroArt({ cls: "hero-art" }),
-    h(
-      "div",
-      { class: "hero-body" },
-      h("p", { class: "eyebrow", text: "Something's off" }),
-      h("h1", { class: "hero-title hero-title-sm", text: "Your library didn't load" }),
-      h("p", { class: "hero-meta", text: message }),
-      h("div", { class: "hero-actions" }, button("Try again", { kind: "primary", size: "lg", icon: "refresh", primary: true, autofocus: true, onClick: () => void go("home", { replace: true, transition: "fade" }) })),
-    ),
+  const strip = pacingStrip({ seed: "error" });
+  strip.set(null);
+  return heroFrame(
+    "hero-error",
+    "Something's off",
+    h("h1", { class: "hero-title hero-title-sm", id: "hero-title", text: "Your library didn't load" }),
+    h("p", { class: "hero-meta", text: message }),
+    h("div", { class: "hero-actions" }, button("Try again", { kind: "primary", size: "lg", icon: "refresh", primary: true, autofocus: true, onClick: () => void go("home", { replace: true, transition: "fade" }) })),
   );
 }
 
-function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefined, profile: Profile | undefined, profileId: string | null): HTMLElement {
-  const art = heroArt({ cls: "hero-art" });
+/** A pending hero: the instrument is set up but idle (target cadence), with one way forward. */
+function pendingHero(ctx: ScreenContext, label: string, title: string, meta: string, action: HTMLButtonElement): HTMLElement {
+  const strip = pacingStrip({ seed: title });
+  strip.set(null);
+  const el = heroFrame(
+    "hero-pending",
+    label,
+    h("div", { class: "hero-main" }, h("h1", { class: "hero-title", id: "hero-title", text: title })),
+    h("p", { class: "hero-meta", text: meta }),
+    h("div", { class: "hero-strip" }, strip.el),
+    h("div", { class: "hero-actions" }, action),
+  );
+  ctx.onEntered(() => strip.reveal(120));
+  return el;
+}
 
+function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefined, profile: Profile | undefined, profileId: string | null): HTMLElement {
   if (!state.keys_present) {
-    return h(
-      "article",
-      { class: "hero hero-pending", "aria-labelledby": "hero-title" },
-      art,
-      h(
-        "div",
-        { class: "hero-body" },
-        h("p", { class: "eyebrow", text: "Almost ready" }),
-        h("h1", { class: "hero-title", id: "hero-title", text: oot ? oot.title : "Your games" }),
-        h("p", { class: "hero-meta", text: "Guarana needs your keys before a game can start. Dump prod.keys from your console, then import it." }),
-        h("div", { class: "hero-actions" }, button("Find my keys", { kind: "primary", size: "xl", icon: "key", primary: true, autofocus: true, onClick: () => void go("scan") })),
-      ),
+    return pendingHero(
+      ctx,
+      "Almost ready",
+      oot ? oot.title : "Your games",
+      "Guarana needs your keys before a game can start. Dump prod.keys from your console, then import it.",
+      button("Find my keys", { kind: "primary", size: "xl", icon: "key", primary: true, autofocus: true, onClick: () => void go("scan") }),
     );
   }
 
   if (!oot) {
-    return h(
-      "article",
-      { class: "hero hero-pending", "aria-labelledby": "hero-title" },
-      art,
-      h(
-        "div",
-        { class: "hero-body" },
-        h("p", { class: "eyebrow", text: "Ocarina first" }),
-        h("h1", { class: "hero-title", id: "hero-title", text: "Add Ocarina of Time" }),
-        h("p", { class: "hero-meta", text: "Guarana is tuned around it first: its own profile, motion data and measured fixes. Other games run too." }),
-        h("div", { class: "hero-actions" }, button("Find my games", { kind: "primary", size: "xl", icon: "search", primary: true, autofocus: true, onClick: () => void go("scan", { params: { deep: true } }) })),
-      ),
+    return pendingHero(
+      ctx,
+      "Ocarina first",
+      "Add Ocarina of Time",
+      "Guarana is tuned around it first: its own profile, motion data and measured fixes. Other games run too.",
+      button("Find my games", { kind: "primary", size: "xl", icon: "search", primary: true, autofocus: true, onClick: () => void go("scan", { params: { deep: true } }) }),
     );
   }
 
   const title = h("h1", { class: "hero-title", id: "hero-title", text: oot.title });
   const session = lastSession(oot.title_id);
-  const meta = session ? `Last played ${relativeTime(session.last)} · ${duration(session.seconds)}` : "Ready for your first session";
-  const chips = h(
+
+  // ---- The measurement: the last session's pacing, if the emulator's log reported one.
+  const strip = pacingStrip({ seed: oot.title_id || oot.title });
+  const onTime = odometer("00.0", { label: "percent of frames on time" });
+  const fps = odometer("00.0", { label: "game frames per second" });
+  const p95 = odometer("00.0", { label: "milliseconds, 95th percentile" });
+  const shown = odometer("00.0", { label: "shown frames per second" });
+  const onTimeLabel = h("span", { class: "readout-label", text: "Frames on time" });
+  const numerals = h(
+    "div",
+    { class: "hero-numerals" },
+    h("div", { class: "readout readout-xl readout-hero" }, h("span", { class: "readout-value" }, onTime.el, h("span", { class: "readout-unit", text: "%" })), onTimeLabel),
+  );
+  const ticks = h(
+    "div",
+    { class: "hero-ticks" },
+    readout("Game fps", fps.el),
+    readout("Frame time p95", p95.el, { unit: "ms" }),
+    readout("Shown fps", shown.el),
+    readout("Last played", h("span", { class: "readout-text", text: session ? relativeTime(session.last) : "Not yet" }), {
+      unit: session ? duration(session.seconds) : undefined,
+    }),
+  );
+  let first = true;
+  const showPacing = (p: Pacing | null) => {
+    strip.set(p);
+    const roll = (o: ReturnType<typeof odometer>, n: number | null) => o.set(n === null ? "–" : fixed1(n).padStart(4, "0"));
+    if (first) {
+      // Arrive at zero, then roll up once the hero is in place.
+      first = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => showPacing(p)));
+      return;
+    }
+    roll(onTime, p ? p.within2 : null);
+    roll(fps, p ? p.game_fps : null);
+    roll(p95, p ? p.p95 : null);
+    roll(shown, p ? p.shown_fps : null);
+    onTimeLabel.textContent = p ? `Frames on time · last session, ${relativeTime(p.at)}` : "Frames on time · no session measured yet";
+    numerals.classList.toggle("is-empty", !p);
+  };
+  showPacing(lastPacing(oot.title_id) ?? lastPacing(oot.title));
+  pacingSeen.subscribe((seen) => {
+    if (seen && (seen.key === oot.title_id || seen.key === oot.title)) showPacing(seen.p);
+  }, ctx.signal);
+
+  const specs = h(
     "ul",
-    { class: "chips", "aria-label": "Profile" },
+    { class: "chips hero-specs", "aria-label": "Profile" },
     h("li", { class: "chip" }, icon("sliders"), profile ? profile.name : "No profile yet"),
     HIGHLIGHTS.filter((x) => toggleOn(profile, x.id))
       .slice(0, 3)
-      .map((x) => h("li", { class: "chip" }, icon("sparkle"), x.label)),
+      .map((x) => h("li", { class: "chip" }, icon("check"), x.label)),
   );
   const warmEl = h("span", { class: "warm", role: "status" });
-  const play = button("Play", {
+  const play = button(["Play", glyph("menu")], {
     kind: "play",
     size: "xl",
     icon: "play",
@@ -218,10 +278,10 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
     attrs: { "aria-describedby": "hero-title" },
     onClick: () => {
       rumble(60);
-      art.style.setProperty("view-transition-name", "hero-art");
+      strip.el.style.setProperty("view-transition-name", "hero-art");
       title.style.setProperty("view-transition-name", "hero-title");
       void go("launch", { params: { game: oot, profileId, morph: true }, transition: "launch" }).catch((e: unknown) => {
-        art.style.removeProperty("view-transition-name");
+        strip.el.style.removeProperty("view-transition-name");
         title.style.removeProperty("view-transition-name");
         toast(errorText(e), { tone: "fail" });
       });
@@ -231,7 +291,7 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
   // "Prepare shaders" (warm_shaders). While this title's shaders build, from here or the automatic
   // run after a driver change, Play waits: the backend refuses to start the same title meanwhile.
   const prepare = button("Prepare shaders", {
-    kind: "ghost",
+    kind: "secondary",
     size: "lg",
     icon: "sparkle",
     attrs: { title: "Builds this game's shaders now, so first visits hitch less" },
@@ -273,25 +333,20 @@ function renderHero(ctx: ScreenContext, state: LauncherState, oot: Game | undefi
   };
   warmStatus.subscribe(renderShaderWarm, ctx.signal);
 
-  const hero = h(
-    "article",
-    { class: "hero hero-ready", "aria-labelledby": "hero-title" },
-    art,
-    h(
-      "div",
-      { class: "hero-body" },
-      h("p", { class: "eyebrow", text: "Ready to play" }),
-      title,
-      h("p", { class: "hero-meta" }, icon("clock"), meta),
-      chips,
-      h("div", { class: "hero-actions" }, play, prepare, warmEl),
-      warmBox,
-      profileId === "intel-arc-igpu"
-        ? h("p", { class: "hero-fact" }, icon("gauge"), "Measured on an Arc 140T: Hyrule Field 14.75 → 22.83 game fps, frame generation off.")
-        : null,
-    ),
+  const hero = heroFrame(
+    "hero-ready",
+    "Ready to play",
+    h("div", { class: "hero-main" }, title, numerals),
+    h("div", { class: "hero-strip" }, strip.el),
+    ticks,
+    h("div", { class: "hero-deck" }, h("div", { class: "hero-actions" }, play, prepare, warmEl), specs),
+    warmBox,
+    profileId === "intel-arc-igpu"
+      ? h("p", { class: "hero-fact" }, icon("gauge"), "Measured on an Arc 140T: Hyrule Field 14.75 → 22.83 game fps, frame generation off.")
+      : null,
   );
   renderShaderWarm();
+  ctx.onEntered(() => strip.reveal(80));
 
   // Warm the shader and pipeline caches once, when the main thread is idle.
   const renderWarm = () => {
@@ -353,7 +408,7 @@ function setupCard(state: LauncherState, profile: Profile | undefined, ctx: Scre
     document.querySelector('.tab[data-tab="updates"]')?.classList.add("has-dot");
   });
 
-  return card("Your setup", { icon: "shield" }, rows);
+  return card("Your setup", { icon: "shield", kicker: "Spec sheet" }, rows);
 }
 
 function renderLibrary(section: HTMLElement, body: HTMLElement, games: Game[], state: LauncherState, profileId: string | null, ctx: ScreenContext): void {
@@ -450,11 +505,26 @@ function shareCard(ctx: ScreenContext): HTMLElement {
       })
       .catch(() => undefined);
   });
-  const el = h("section", { class: "card share-card", hidden: true, "aria-label": "Share my numbers" }, text, fine, h("div", { class: "row" }, share, later, never));
+  const el = h(
+    "section",
+    { class: "card share-card", hidden: true, "aria-label": "Share my numbers" },
+    h("p", { class: "idx share-idx" }, h("span", { class: "rec", "aria-hidden": "true" }), h("span", { text: "Session measured" })),
+    text,
+    fine,
+    h("div", { class: "row" }, share, later, never),
+  );
   function show(st: ShareStatus): void {
     if (ctx.signal.aborted) return;
     el.hidden = !st.offer;
     text.textContent = st.offer?.text ?? "";
+    const o = st.offer;
+    if (o) {
+      // Keep the numbers for the hero instrument, after the offer is shared or dismissed too.
+      const key = o.title_id ?? o.game;
+      const p: Pacing = { at: o.at, game_fps: o.game_fps, within2: o.within2, shown_fps: o.shown_fps, p50: o.p50, p95: o.p95, p99: o.p99, gameplay_secs: o.gameplay_secs };
+      recordPacing(key, p);
+      pacingSeen.set({ key, p });
+    }
   }
   void api.getShareStatus().then(show, () => undefined);
   void events.shareChanged(show, ctx.signal).catch(() => undefined);
@@ -621,7 +691,7 @@ function modeCard(ctx: ScreenContext): HTMLElement {
   return h(
     "section",
     { class: "card mode-card", "aria-label": "How Guarana runs" },
-    h("div", { class: "mode-head" }, h("h2", { class: "card-title", text: "How should it run?" }), seg.el),
+    h("div", { class: "mode-head" }, h("div", { class: "mode-titles" }, h("p", { class: "idx" }, h("span", { class: "idx-n", "aria-hidden": "true" }), h("span", { class: "idx-t", text: "Mode" })), h("h2", { class: "card-title", text: "How should it run?" })), seg.el),
     reason,
     note,
     autoRow,

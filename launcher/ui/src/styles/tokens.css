@@ -1,72 +1,85 @@
-/* Design tokens. Dark ("night stage") is the default on :root; light is opt-in via data-theme.
-   Brand values come from assets/brand (ember gradient, leaf, echo) and site/assets/site.css. */
+/* Design tokens: "a precision instrument". Pure black, one ember accent, hairlines, huge numerals.
+   Dark ("instrument") is the default on :root; light ("paper chart") is opt-in via data-theme.
+   The night stages (intro, launch) stay black in both themes. Brand values: assets/brand. */
 
 :root {
   color-scheme: dark;
 
-  /* Brand: fixed in both themes */
-  --ember-1: #ffc94a;
-  --ember-2: #f2851a;
+  /* Brand: fixed in both themes. --ember is the interface's one accent. */
+  --ember: #ff9a2e;
+  --ember-hi: #ffc94a;
+  --ember-deep: #f2851a;
+  --ember-1: var(--ember-hi);
+  --ember-2: var(--ember-deep);
   --echo: #f59e0b;
   --leaf: #3ccf7e;
-  --ink: #0f1218;
-  --night: #070b14;
-  --on-ember: #1a1204;
-  --grad-ember: linear-gradient(135deg, var(--ember-1) 0%, var(--ember-2) 100%);
+  --ink: #000;
+  --night: #000;
+  --on-ember: #000;
+  --grad-ember: linear-gradient(90deg, var(--ember-hi), var(--ember-deep));
 
-  /* Surfaces */
-  --bg: #070b14;
-  --bg-glow-1: rgba(52, 86, 178, 0.24);
-  --bg-glow-2: rgba(255, 176, 32, 0.08);
-  --surface: #0e1527;
-  --surface-2: #141d33;
-  --surface-3: #1b2640;
-  --surface-hover: #172038;
-  --border: rgba(148, 163, 184, 0.14);
-  --border-strong: rgba(148, 163, 184, 0.28);
+  /* Surfaces: black, separated by hairlines rather than fills */
+  --bg: #000;
+  --surface: #000;
+  --surface-2: #0c0c0c;
+  --surface-3: #171717;
+  --surface-hover: #0f0f0f;
+  --line: rgba(255, 255, 255, 0.13);
+  --line-2: rgba(255, 255, 255, 0.24);
+  --line-3: rgba(255, 255, 255, 0.46);
+  --grid: rgba(255, 255, 255, 0.05);
+  --grid-mark: rgba(255, 255, 255, 0.16);
+  --border: var(--line);
+  --border-strong: var(--line-2);
 
-  /* Text */
-  --text: #eef1f6;
-  --text-2: #c2c9d6;
-  --muted: #8f99ad;
+  /* Text (all at least 4.5:1 on --bg and --surface-3) */
+  --text: #f4f4f0;
+  --text-2: #bfbfb8;
+  --muted: #8f8f88;
 
-  /* Accent (links, focus, selected): the site's dark accent */
-  --accent: #fbbf24;
-  --accent-2: #fcd34d;
-  --accent-soft: rgba(251, 191, 36, 0.13);
-  --halo: #ffc94a;
+  /* Accent: the ember, for selection, focus and the one primary action */
+  --accent: var(--ember);
+  --accent-2: #ffb766;
+  --accent-soft: rgba(255, 154, 46, 0.12);
+  --halo: var(--ember);
 
   /* Status: always paired with an icon and a word */
-  --ok: #4ade80;
-  --ok-bg: rgba(74, 222, 128, 0.12);
-  --warn: #fdba74;
-  --warn-bg: rgba(253, 186, 116, 0.13);
-  --fail: #fca5a5;
-  --fail-bg: rgba(248, 113, 113, 0.15);
-  --info: #c4b5fd;
-  --info-bg: rgba(196, 181, 253, 0.13);
+  --ok: #8fe3b1;
+  --ok-bg: rgba(143, 227, 177, 0.09);
+  --warn: #ffc94a;
+  --warn-bg: rgba(255, 201, 74, 0.09);
+  --fail: #ff7d6e;
+  --fail-bg: rgba(255, 125, 110, 0.1);
+  --info: #c9c9c2;
+  --info-bg: rgba(201, 201, 194, 0.08);
 
-  /* Depth */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px -16px rgba(0, 0, 0, 0.7);
-  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 28px 60px -24px rgba(0, 0, 0, 0.8);
-  --glow-ember: 0 12px 34px -12px rgba(242, 133, 26, 0.7);
-  --skeleton: rgba(148, 163, 184, 0.1);
-  --skeleton-hi: rgba(148, 163, 184, 0.2);
-  --scrim: rgba(7, 11, 20, 0.78);
+  /* Depth: an instrument has none. Kept as tokens for the few overlays (toasts, menus). */
+  --shadow-1: none;
+  --shadow-2: 0 0 0 1px var(--line-2), 0 24px 48px -24px rgba(0, 0, 0, 0.9);
+  --glow-ember: none;
+  --skeleton: rgba(255, 255, 255, 0.06);
+  --skeleton-hi: rgba(255, 255, 255, 0.14);
+  --scrim: rgba(0, 0, 0, 0.82);
 
-  /* Type: system fonts only (Segoe UI Variable on Windows 11), like the site */
+  /* Type: system fonts only. Display for titles and numerals, mono for labels and units. */
   --font: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, SFMono-Regular, Menlo, monospace;
+  --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, SFMono-Regular, Menlo, monospace;
+  --fs-2xs: 0.6875rem;
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
   --fs-md: 1rem;
   --fs-lg: 1.125rem;
   --fs-xl: 1.375rem;
-  --fs-2xl: 2rem;
-  --fs-3xl: 2.75rem;
+  --fs-2xl: 2.25rem;
+  --fs-3xl: 3rem;
+  /* The enormous ones: the game title and the instrument numerals. */
+  --fs-title: clamp(3.5rem, 7.8vw, 11rem);
+  --fs-numeral: clamp(4rem, 9vw, 12rem);
+  --fs-numeral-sm: clamp(1.75rem, 2.6vw, 3.5rem);
+  --label-track: 0.14em;
 
-  /* Space: 4 px grid */
+  /* Space: 4 px grid. The page grid is 12 columns with a 96 px hairline module. */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -76,89 +89,90 @@
   --sp-8: 32px;
   --sp-10: 40px;
   --sp-12: 48px;
+  --sp-16: 64px;
+  --module: 96px;
+  --gutter: 40px;
 
-  /* Radius */
-  --r-sm: 8px;
-  --r-md: 14px;
-  --r-lg: 20px;
-  --r-xl: 28px;
-  --r-pill: 999px;
+  /* Radius: sharp. The names stay so every component resolves. */
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+  --r-xl: 0;
+  --r-pill: 0;
 
-  /* Motion: 150-250 ms for micro-interactions, springs for anything that moves */
-  --dur-1: 150ms;
-  --dur-2: 200ms;
-  --dur-3: 250ms;
-  --dur-screen: 420ms;
-  --dur-hero: 700ms;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
-  --ease-emph: cubic-bezier(0.2, 0, 0, 1);
-  /* Fallbacks for engines without linear(); replaced below. */
-  --ease-spring: cubic-bezier(0.3, 1.25, 0.5, 1);
-  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion: fast, mechanical, exact. 120-200 ms, no overshoot, choreographed in sequence. */
+  --dur-1: 120ms;
+  --dur-2: 160ms;
+  --dur-3: 200ms;
+  --dur-screen: 200ms;
+  --dur-hero: 360ms;
+  --stagger: 28ms;
+  --ease-mech: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.6, 0, 0.9, 0.3);
+  --ease-emph: cubic-bezier(0.7, 0, 0.1, 1);
+  /* No bounce anywhere: the old spring names resolve to the mechanical curve. */
+  --ease-spring: var(--ease-mech);
+  --ease-bounce: var(--ease-mech);
 }
 
-@supports (transition-timing-function: linear(0, 1)) {
-  :root {
-    /* Damped springs (zeta 0.75: 3% overshoot; zeta 0.55: 12%), sampled from the closed form. */
-    --ease-spring: linear(0, 0.095 5%, 0.294 10%, 0.508 15%, 0.693 20%, 0.833 25%, 0.928 30%, 0.986 35%, 1.015 40%, 1.027 45%, 1.028 50%, 1.024 55%, 1.018 60%, 1.012 65%, 1.007 70%, 1.004 75%, 1.001 80%, 1);
-    --ease-bounce: linear(0, 0.141 5%, 0.432 10%, 0.727 15%, 0.95 20%, 1.078 25%, 1.124 30%, 1.117 35%, 1.083 40%, 1.045 45%, 1.013 50%, 0.994 55%, 0.985 60%, 0.984 65%, 0.988 70%, 0.993 75%, 0.997 80%, 1);
-  }
-}
-
-/* The night stages (intro, game hero, launch) stay dark in both themes: their controls use dark tokens. */
+/* The night stages stay black in both themes: their controls use the dark tokens. */
 .intro,
-.hero,
-.launch {
+.launch,
+.boot {
   color-scheme: dark;
-  --surface: #0e1527;
-  --surface-2: #141d33;
-  --surface-3: #1b2640;
-  --surface-hover: #172038;
-  --border: rgba(148, 163, 184, 0.14);
-  --border-strong: rgba(148, 163, 184, 0.28);
-  --text: #eef1f6;
-  --text-2: #c2c9d6;
-  --muted: #8f99ad;
-  --accent: #fbbf24;
-  --accent-2: #fcd34d;
-  --accent-soft: rgba(251, 191, 36, 0.13);
-  --halo: #ffc94a;
-  --ok: #4ade80;
-  --fail: #fca5a5;
-  --glow-ember: 0 12px 34px -12px rgba(242, 133, 26, 0.7);
+  --bg: #000;
+  --surface: #000;
+  --surface-2: #0c0c0c;
+  --surface-3: #171717;
+  --surface-hover: #0f0f0f;
+  --line: rgba(255, 255, 255, 0.13);
+  --line-2: rgba(255, 255, 255, 0.24);
+  --line-3: rgba(255, 255, 255, 0.46);
+  --grid: rgba(255, 255, 255, 0.05);
+  --grid-mark: rgba(255, 255, 255, 0.16);
+  --text: #f4f4f0;
+  --text-2: #bfbfb8;
+  --muted: #8f8f88;
+  --accent: var(--ember);
+  --accent-2: #ffb766;
+  --accent-soft: rgba(255, 154, 46, 0.12);
+  --halo: var(--ember);
+  --ok: #8fe3b1;
+  --fail: #ff7d6e;
+  --warn: #ffc94a;
 }
 
+/* Light: a paper chart. Ink on paper, the ember deepened to keep 4.5:1. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f7f5f0;
-  --bg-glow-1: rgba(110, 140, 230, 0.14);
-  --bg-glow-2: rgba(255, 176, 32, 0.16);
-  --surface: #ffffff;
-  --surface-2: #f4f2ed;
-  --surface-3: #ebe7df;
-  --surface-hover: #faf8f4;
-  --border: #e4e0d8;
-  --border-strong: #cdc7bb;
-  --text: #16181d;
-  --text-2: #434954;
-  --muted: #5c626d;
-  --accent: #a8510a;
-  --accent-2: #8a420a;
-  --accent-soft: rgba(168, 81, 10, 0.1);
-  --halo: #d97706;
-  --ok: #05744f;
-  --ok-bg: #e6f6ef;
-  --warn: #9a3412;
-  --warn-bg: #fff1e6;
-  --fail: #b42318;
-  --fail-bg: #fdecea;
-  --info: #6a2fd0;
-  --info-bg: #f1ecfd;
-  --shadow-1: 0 1px 2px rgba(22, 24, 29, 0.06), 0 10px 28px -16px rgba(22, 24, 29, 0.22);
-  --shadow-2: 0 2px 8px rgba(22, 24, 29, 0.08), 0 28px 60px -24px rgba(22, 24, 29, 0.3);
-  --glow-ember: 0 12px 30px -14px rgba(194, 96, 10, 0.55);
-  --skeleton: rgba(22, 24, 29, 0.06);
-  --skeleton-hi: rgba(22, 24, 29, 0.12);
-  --scrim: rgba(247, 245, 240, 0.85);
+  --bg: #f3f2ee;
+  --surface: #f3f2ee;
+  --surface-2: #eae9e4;
+  --surface-3: #dfded8;
+  --surface-hover: #ecebe6;
+  --line: rgba(0, 0, 0, 0.14);
+  --line-2: rgba(0, 0, 0, 0.28);
+  --line-3: rgba(0, 0, 0, 0.5);
+  --grid: rgba(0, 0, 0, 0.05);
+  --grid-mark: rgba(0, 0, 0, 0.18);
+  --text: #0b0b0a;
+  --text-2: #383835;
+  --muted: #5a5a55;
+  --accent: #9a3f08;
+  --accent-2: #7d3306;
+  --accent-soft: rgba(154, 63, 8, 0.09);
+  --halo: #9a3f08;
+  --ok: #0a6a43;
+  --ok-bg: rgba(10, 106, 67, 0.08);
+  --warn: #8a4a00;
+  --warn-bg: rgba(138, 74, 0, 0.08);
+  --fail: #b0251a;
+  --fail-bg: rgba(176, 37, 26, 0.08);
+  --info: #45453f;
+  --info-bg: rgba(0, 0, 0, 0.05);
+  --shadow-2: 0 0 0 1px var(--line-2), 0 24px 48px -28px rgba(0, 0, 0, 0.35);
+  --skeleton: rgba(0, 0, 0, 0.06);
+  --skeleton-hi: rgba(0, 0, 0, 0.12);
+  --scrim: rgba(243, 242, 238, 0.88);
 }

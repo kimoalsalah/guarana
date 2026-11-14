@@ -125,8 +125,9 @@ export function mountShell(app: HTMLElement, onReport: () => void): Shell {
       indicator.style.opacity = "0";
       return;
     }
-    const left = b.offsetLeft + 12;
-    const width = Math.max(8, b.offsetWidth - 24);
+    // The rail spans the whole tab (number and label), flush with the top bar's hairline.
+    const left = b.offsetLeft;
+    const width = Math.max(8, b.offsetWidth);
     indicator.style.opacity = "1";
     indicator.style.transform = `translateX(${left}px) scaleX(${width / 100})`;
   };

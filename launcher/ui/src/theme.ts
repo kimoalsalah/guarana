@@ -25,11 +25,11 @@ export function initTheme(): void {
 function apply(t: Theme): void {
   root.dataset.theme = t;
   document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", t === "light" ? "light dark" : "dark light");
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "light" ? "#f7f5f0" : "#070b14");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "light" ? "#f3f2ee" : "#000000");
   for (const fn of subs) fn(t);
 }
 
-/** Switches theme with a circular reveal that starts at `origin` (the toggle button). */
+/** Switches theme with a scan wipe from the top. `origin` (the toggle button) is kept for callers. */
 export async function setTheme(t: Theme, origin?: { x: number; y: number }): Promise<void> {
   try {
     localStorage.setItem(KEY, t);

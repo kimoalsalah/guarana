@@ -94,6 +94,8 @@ export async function viewTransition(update: () => void, kind: TransitionKind): 
   try {
     const t = doc.startViewTransition(update);
     running = t;
+    // A transition the browser skips (the window was hidden meanwhile) rejects `ready`: not an error.
+    t.ready.catch(() => undefined);
     await t.updateCallbackDone;
     await t.finished.catch(() => undefined);
   } finally {

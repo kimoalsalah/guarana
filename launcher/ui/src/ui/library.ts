@@ -1,8 +1,8 @@
-// The game list under the hero. Loaded lazily when it scrolls near the viewport.
+// The game list under the hero, set as a table of record: index, title, format and size, Play.
+// Loaded lazily when it scrolls near the viewport.
 
 import { h } from "../dom";
 import { bytes } from "../format";
-import { icon } from "../icons";
 import type { Game } from "../types";
 import { button } from "./controls";
 
@@ -14,12 +14,14 @@ export function libraryList(games: Game[], opts: { canPlay: boolean; onPlay: (g:
     "ul",
     { class: "games" },
     games.map((g, i) => {
-      const title = h("p", { class: "item-title", text: g.title });
+      const title = h("p", { class: "item-title game-title", text: g.title });
       return h(
         "li",
-        { class: "game-row", style: { "--i": String(i) } },
-        h("span", { class: "item-icon" }, icon("game")),
-        h("div", { class: "game-text" }, title, h("p", { class: "item-sub", text: `${CONTAINER[g.container]} · ${bytes(g.size_bytes)}` })),
+        { class: "game-row", style: { "--i": String(Math.min(i, 8)) } },
+        h("span", { class: "game-n", "aria-hidden": "true", text: String(i + 1).padStart(2, "0") }),
+        h("div", { class: "game-text" }, title),
+        h("span", { class: "game-meta", text: CONTAINER[g.container] }),
+        h("span", { class: "game-meta game-size", text: bytes(g.size_bytes) }),
         button("Play", {
           kind: "secondary",
           size: "sm",

@@ -1,173 +1,124 @@
-/* Welcome intro: a dark stage with depth layers, bloom, a light beam, embers and film grain.
-   Base styles are the final state; the timeline in welcome.ts animates into it (fill: backwards),
-   so reduced motion or a skip simply shows this. Only transform and opacity move, except the drop's
-   own path and the wordmark's light sweep (small paints). */
+/* Welcome intro: the instrument powers on. A measuring field (grid, scan line, pointer crosshair),
+   then an editorial plate: the mark, the wordmark set enormous, a measured number on an odometer,
+   the tagline and Set up. Base styles are the final state; the timeline in welcome.ts animates into
+   it (fill: backwards), so reduced motion or a skip simply shows this. */
 
 .intro {
   position: fixed;
   inset: 0;
   z-index: 30;
   display: grid;
-  place-items: center;
+  align-items: center;
   overflow: hidden;
-  background: #04070d;
-  color: #eef1f6;
+  background: #000;
+  color: var(--text);
 }
 
-.stage { position: absolute; inset: 0; --mx: 0; --my: 0; }
-.stage-dolly { position: absolute; inset: 0; transform-origin: 50% 42%; }
-.layer { position: absolute; inset: -5%; transition: transform 900ms var(--ease-out); will-change: transform; }
-.layer-far { transform: translate3d(calc(var(--mx) * -8px), calc(var(--my) * -6px), 0); }
-.layer-mid { transform: translate3d(calc(var(--mx) * -20px), calc(var(--my) * -14px), 0); }
-.layer-near { inset: 0; transform: translate3d(calc(var(--mx) * -36px), calc(var(--my) * -24px), 0); }
-.layer-beam { inset: 0; overflow: hidden; }
+.ix-field { position: absolute; inset: 0; pointer-events: none; }
+.ix-v,
+.ix-h { position: absolute; background: rgba(255, 255, 255, 0.07); }
+.ix-v { top: 0; bottom: 0; width: 1px; }
+.ix-h { left: 0; right: 0; height: 1px; }
+.ix-v:nth-child(7),
+.ix-h:nth-child(18) { background: rgba(255, 255, 255, 0.14); }
+.ix-scan { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--ember); opacity: 0; }
 
-.stars {
+/* Pointer crosshair: two hairlines moved by one transform. Shows once the pointer moves. */
+.ix-cross { position: absolute; left: 0; top: 0; opacity: 0; transition: opacity var(--dur-2) linear; }
+.ix-cross.is-on { opacity: 1; }
+.ix-cx,
+.ix-cy { position: absolute; background: rgba(255, 154, 46, 0.35); }
+.ix-cx { left: 0; top: -100vh; width: 1px; height: 200vh; }
+.ix-cy { top: 0; left: -100vw; height: 1px; width: 200vw; }
+
+.ix-meta {
   position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(1.4px 1.4px at 8% 18%, rgba(255, 255, 255, 0.9), transparent 60%),
-    radial-gradient(1px 1px at 22% 64%, rgba(255, 255, 255, 0.6), transparent 60%),
-    radial-gradient(1.6px 1.6px at 37% 9%, rgba(255, 228, 176, 0.8), transparent 60%),
-    radial-gradient(1px 1px at 52% 81%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1.3px 1.3px at 68% 27%, rgba(255, 255, 255, 0.75), transparent 60%),
-    radial-gradient(1px 1px at 81% 72%, rgba(255, 228, 176, 0.65), transparent 60%),
-    radial-gradient(1.5px 1.5px at 93% 11%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1px 1px at 4% 92%, rgba(255, 255, 255, 0.5), transparent 60%),
-    radial-gradient(1px 1px at 46% 46%, rgba(255, 255, 255, 0.35), transparent 60%);
-  background-size: 560px 320px;
-  /* The stage settles once the intro is over: twinkle, haze and grain run a few cycles, then rest
-     while Set up waits. Each ends on its base frame, so nothing jumps when it stops. */
-  animation: twinkle 7s ease-in-out 2 alternate;
+  left: var(--gutter);
+  right: 180px;
+  top: 22px;
+  z-index: 2;
+  display: flex;
+  gap: 28px;
+  color: var(--muted);
+  font: 600 var(--fs-2xs) / 1 var(--mono);
+  letter-spacing: var(--label-track);
+  text-transform: uppercase;
 }
-@keyframes twinkle { to { opacity: 0.55; } }
+.ix-meta > :first-child { color: var(--text); }
+.ix-coord { margin-left: auto; font-variant-numeric: tabular-nums; white-space: pre; }
 
-.haze { position: absolute; border-radius: 50%; }
-.haze-a {
-  left: -32vmax;
-  top: -48vmax;
-  width: 96vmax;
-  height: 96vmax;
-  background: radial-gradient(circle, rgba(52, 86, 178, 0.38) 0%, rgba(52, 86, 178, 0.14) 34%, rgba(52, 86, 178, 0) 64%);
-  animation: haze-drift 9s ease-in-out 2 alternate;
-}
-.haze-b {
-  right: -34vmax;
-  bottom: -50vmax;
-  width: 88vmax;
-  height: 88vmax;
-  background: radial-gradient(circle, rgba(242, 133, 26, 0.24) 0%, rgba(242, 133, 26, 0.08) 34%, rgba(242, 133, 26, 0) 64%);
-  animation: haze-drift 22s ease-in-out 1 alternate-reverse;
-}
-@keyframes haze-drift { to { translate: 4vmax 3vmax; } }
-
-.beam {
-  position: absolute;
-  left: 50%;
-  top: -30%;
-  width: 26vw;
-  height: 160%;
-  margin-left: -13vw;
-  opacity: 0;
-  background: linear-gradient(90deg, rgba(255, 214, 150, 0) 0%, rgba(255, 214, 150, 0.08) 38%, rgba(255, 236, 200, 0.2) 50%, rgba(255, 214, 150, 0.08) 62%, rgba(255, 214, 150, 0) 100%);
-}
-
-.ember {
-  position: absolute;
-  left: var(--ox, 44%);
-  top: var(--oy, 38%);
-  width: 7px;
-  height: 7px;
-  margin: -3.5px 0 0 -3.5px;
-  border-radius: 50%;
-  opacity: 0;
-  background: radial-gradient(circle, #fff3c4 0%, #ffc94a 38%, rgba(242, 133, 26, 0) 70%);
-}
-
-.grain {
-  position: absolute;
-  inset: -80px;
-  opacity: 0.07;
-  pointer-events: none;
-  background-image: var(--grain, none);
-  background-size: 160px 160px;
-  animation: grain 0.9s steps(6) 4;
-}
-@keyframes grain {
-  0% { transform: translate(0, 0); }
-  20% { transform: translate(-22px, 14px); }
-  40% { transform: translate(16px, -28px); }
-  60% { transform: translate(-34px, -10px); }
-  80% { transform: translate(26px, 32px); }
-  100% { transform: translate(0, 0); }
-}
-.vignette {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(125% 95% at 50% 44%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.7) 100%);
-}
-
+/* The plate: left-aligned on the grid's second column. */
 .intro-center {
   position: relative;
   z-index: 2;
   display: grid;
-  justify-items: center;
-  gap: 14px;
-  padding: 24px;
-  text-align: center;
+  justify-items: start;
+  gap: 22px;
+  width: min(100%, 1240px);
+  padding: 72px var(--gutter) 48px calc(var(--gutter) + 8.333vw);
 }
-.intro-logo { position: relative; width: clamp(150px, 24vmin, 240px); aspect-ratio: 86 / 68; margin-bottom: 6px; }
+.intro-logo { position: relative; width: clamp(96px, 13vmin, 150px); aspect-ratio: 86 / 68; }
 .intro-mark { position: relative; width: 100%; height: 100%; overflow: visible; }
-.bloom {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 230%;
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(circle, rgba(255, 201, 74, 0.36) 0%, rgba(242, 133, 26, 0.16) 28%, rgba(242, 133, 26, 0.05) 48%, rgba(242, 133, 26, 0) 66%);
-}
-.bloom-wide { width: 560%; background: radial-gradient(circle, rgba(255, 176, 32, 0.1) 0%, rgba(52, 86, 178, 0.08) 38%, rgba(52, 86, 178, 0) 64%); }
-.intro-drop-wrap { transform-box: view-box; transform-origin: 36px 36px; }
 .intro-leaf { transform-box: view-box; transform-origin: 37.5px 20px; }
-.intro-echo { transform-box: view-box; }
-.intro-sweep { opacity: 0; transform-box: view-box; }
+.ix-ticks {
+  position: absolute;
+  left: 62%;
+  bottom: -18px;
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font: 600 9px / 1 var(--mono);
+  letter-spacing: 0.08em;
+}
 
 .intro-word {
   font-family: var(--font-display);
-  font-size: clamp(2.8rem, 8vmin, 4.8rem);
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  font-size: clamp(4.5rem, 15vw, 17rem);
+  font-weight: 700;
+  letter-spacing: -0.065em;
+  line-height: 0.8;
+  margin-left: -0.05em;
 }
-.intro-word-text {
-  display: inline-block;
-  padding: 0 0.04em 0.06em;
-  color: transparent;
-  background: linear-gradient(100deg, #f4f5f7 0%, #f4f5f7 40%, #ffe7a8 47%, #ffffff 50%, #ffe7a8 53%, #f4f5f7 60%, #f4f5f7 100%);
-  background-size: 260% 100%;
-  background-position: 0% 0;
-  -webkit-background-clip: text;
-  background-clip: text;
+.intro-word-text { display: inline-flex; }
+.ix-ch { display: inline-block; overflow: hidden; padding-bottom: 0.06em; }
+.ix-ch > span { display: inline-block; }
+
+.ix-measure { display: grid; gap: 10px; width: min(100%, 640px); }
+.ix-rule {
+  display: block;
+  height: 9px;
+  border-bottom: 1px solid var(--line-3);
+  background: repeating-linear-gradient(90deg, var(--line-3) 0 1px, transparent 1px 32px) 0 100% / 100% 9px no-repeat;
+  transform-origin: 0 50%;
 }
-.intro-tag { max-width: 44ch; color: #c9ced6; font-size: clamp(1rem, 2.4vmin, 1.3rem); text-wrap: balance; }
-.intro-cta { margin-top: 22px; min-width: 210px; }
-.intro-fine { margin-top: 4px; color: #6f788b; font-size: var(--fs-xs); }
-.intro-skip { position: absolute; top: 18px; right: 20px; z-index: 3; color: #9aa3b5; }
-.intro-skip:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #eef1f6; }
+.ix-readouts { display: flex; align-items: baseline; gap: 14px; }
+.ix-num { font-family: var(--font-display); font-size: clamp(2.25rem, 4.6vw, 4.5rem); font-weight: 200; letter-spacing: -0.05em; line-height: 0.9; color: var(--text-2); }
+.ix-num-to { color: var(--ember); }
+.ix-arrow { color: var(--muted); font-size: var(--fs-xl); }
+.ix-unit,
+.ix-caption { color: var(--muted); font: 600 var(--fs-2xs) / 1.4 var(--mono); letter-spacing: var(--label-track); text-transform: uppercase; }
+
+.intro-tag { max-width: 44ch; color: var(--text-2); font-size: clamp(1rem, 1.8vw, 1.3rem); }
+.ix-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin-top: 8px; }
+.intro-cta { min-width: 220px; font: 700 var(--fs-md) / 1 var(--mono); letter-spacing: 0.24em; text-transform: uppercase; }
+.intro-fine { color: var(--muted); font-size: var(--fs-xs); }
+.intro-skip { position: absolute; top: 12px; right: 16px; z-index: 3; color: var(--text-2); font: 600 var(--fs-2xs) / 1 var(--mono); letter-spacing: var(--label-track); text-transform: uppercase; }
 .intro-skip[hidden] { display: none; }
 
-/* Leaving the intro: the big logo flies into the top bar's brand mark. */
+@media (max-height: 700px) {
+  .intro-center { gap: 14px; padding-top: 56px; }
+  .intro-word { font-size: clamp(4rem, 12vw, 10rem); }
+}
+
+/* Leaving the intro: the mark flies into the top bar's brand mark. */
 html[data-vt="intro-exit"] .intro-mark,
 html[data-vt="intro-exit"] .brand-mark { view-transition-name: brand-mark; }
-html[data-vt="intro-exit"]::view-transition-group(brand-mark) { animation-duration: 900ms; animation-timing-function: var(--ease-emph); }
+html[data-vt="intro-exit"]::view-transition-group(brand-mark) { animation-duration: 420ms; animation-timing-function: var(--ease-emph); }
 html[data-vt="intro-exit"]::view-transition-old(brand-mark),
 html[data-vt="intro-exit"]::view-transition-new(brand-mark) { height: 100%; object-fit: contain; }
 html[data-vt="intro-exit"]::view-transition-group(main) { animation-duration: 0s; }
-html[data-vt="intro-exit"]::view-transition-old(main) { animation: vt-fade-out 420ms var(--ease-out) both; }
-html[data-vt="intro-exit"]::view-transition-new(main) { animation: vt-in-up 640ms var(--ease-spring) 300ms both; }
-html[data-vt="intro-exit"]::view-transition-new(topbar) { animation: vt-fade-in 520ms var(--ease-out) 420ms both; }
-@keyframes vt-in-up { from { opacity: 0; transform: translateY(24px); } }
+html[data-vt="intro-exit"]::view-transition-old(main) { animation: vt-shutter-close 260ms var(--ease-in) both; }
+html[data-vt="intro-exit"]::view-transition-new(main) { animation: vt-in-up var(--dur-3) var(--ease-mech) 240ms both; }
+html[data-vt="intro-exit"]::view-transition-new(topbar) { animation: vt-fade-in var(--dur-3) linear 280ms both; }
+@keyframes vt-in-up { from { opacity: 0; transform: translateY(16px); } }
+@keyframes vt-shutter-close { to { clip-path: inset(50% 0 50% 0); } }
