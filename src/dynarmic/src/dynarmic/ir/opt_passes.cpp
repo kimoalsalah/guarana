@@ -624,6 +624,12 @@ static void A64GetSetElimination(IR::Block& block) {
             break;
         }
         default: {
+            if (IsLseMemoryAccess(opcode)) {
+                reg_info = {};
+                vec_info = {};
+                sp_info = {};
+                nzcv_info = {};
+            }
             if (ReadsFromCPSR(opcode) || WritesToCPSR(opcode)) {
                 nzcv_info = {};
             }

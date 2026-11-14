@@ -58,6 +58,17 @@ public:
 
     void ClearCache() override;
 
+    bool UseLseHostAtomics() const {
+        return conf.fastmem_pointer && conf.fastmem_exclusive_access
+            && exception_handler.SupportsFastmem()
+            && conf.HasOptimization(OptimizationFlag::Experimental_LseHostAtomics)
+            && conf.HasOptimization(OptimizationFlag::Unsafe_IgnoreGlobalMonitor);
+    }
+
+    bool UseLseHostAtomicsAt(u64 pc) const {
+        return !lse_disabled_pcs.contains(pc);
+    }
+
     void InvalidateCacheRanges(const boost::icl::interval_set<u64>& ranges);
 
 //protected:
@@ -104,6 +115,10 @@ public:
     std::optional<FakeCall> FastmemCallback(u64 rip);
 
     // Memory access helpers
+    template<size_t operation, size_t bitsize>
+    void EmitLseAtomic(A64EmitContext& ctx, IR::Inst* inst);
+    // True until the deoptimization's own pending invalidation has been consumed.
+    ::Common::unordered_map<u64, bool> lse_disabled_pcs;
     void EmitCheckMemoryAbort(A64EmitContext& ctx, IR::Inst* inst, Xbyak::Label* end = nullptr);
     template<std::size_t bitsize, auto callback>
     void EmitMemoryRead(A64EmitContext& ctx, IR::Inst* inst);

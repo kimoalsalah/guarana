@@ -25,6 +25,167 @@
 namespace Dynarmic::Backend::RV64 {
 
 template<>
+void EmitIR<IR::Opcode::A64LseAdd8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas8>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas16>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas32>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas64>(biscuit::Assembler&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+
+template<>
 void EmitIR<IR::Opcode::Void>(biscuit::Assembler&, EmitContext&, IR::Inst*) {}
 
 template<>

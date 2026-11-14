@@ -45,6 +45,23 @@ public:
         return static_cast<u64>(pc - pc % alignment);
     }
 
+    IR::U64 LseAtomic(size_t operation, size_t size, IR::U64 address, IR::U64 source, IR::U64 desired) {
+        static constexpr Opcode opcodes[10][4] = {
+            {Opcode::A64LseAdd8, Opcode::A64LseAdd16, Opcode::A64LseAdd32, Opcode::A64LseAdd64},
+            {Opcode::A64LseClr8, Opcode::A64LseClr16, Opcode::A64LseClr32, Opcode::A64LseClr64},
+            {Opcode::A64LseEor8, Opcode::A64LseEor16, Opcode::A64LseEor32, Opcode::A64LseEor64},
+            {Opcode::A64LseSet8, Opcode::A64LseSet16, Opcode::A64LseSet32, Opcode::A64LseSet64},
+            {Opcode::A64LseSmax8, Opcode::A64LseSmax16, Opcode::A64LseSmax32, Opcode::A64LseSmax64},
+            {Opcode::A64LseSmin8, Opcode::A64LseSmin16, Opcode::A64LseSmin32, Opcode::A64LseSmin64},
+            {Opcode::A64LseUmax8, Opcode::A64LseUmax16, Opcode::A64LseUmax32, Opcode::A64LseUmax64},
+            {Opcode::A64LseUmin8, Opcode::A64LseUmin16, Opcode::A64LseUmin32, Opcode::A64LseUmin64},
+            {Opcode::A64LseSwp8, Opcode::A64LseSwp16, Opcode::A64LseSwp32, Opcode::A64LseSwp64},
+            {Opcode::A64LseCas8, Opcode::A64LseCas16, Opcode::A64LseCas32, Opcode::A64LseCas64},
+        };
+        ASSERT(operation < 10 && size < 4);
+        return Inst<IR::U64>(opcodes[operation][size], ImmCurrentLocationDescriptor(), address, source, desired);
+    }
+
     void SetCheckBit(const IR::U1& value) noexcept {
         Inst(Opcode::A64SetCheckBit, value);
     }

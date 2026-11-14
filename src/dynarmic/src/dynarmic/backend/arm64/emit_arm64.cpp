@@ -24,6 +24,167 @@ namespace Dynarmic::Backend::Arm64 {
 using namespace oaknut::util;
 
 template<>
+void EmitIR<IR::Opcode::A64LseAdd8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseAdd64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseClr64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseEor64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSet64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmax64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSmin64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmax64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseUmin64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseSwp64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas8>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas16>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas32>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+template<>
+void EmitIR<IR::Opcode::A64LseCas64>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {
+    UNREACHABLE(); // The x64-only translation option is never enabled here.
+}
+
+template<>
 void EmitIR<IR::Opcode::Void>(oaknut::CodeGenerator&, EmitContext&, IR::Inst*) {}
 
 template<>

@@ -479,6 +479,10 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
 #if defined(ARCHITECTURE_x86_64)
     // x86-64 host code generation options; Paranoid keeps dynarmic's defaults.
     if (Settings::values.cpu_accuracy.GetValue() != Settings::CpuAccuracy::Paranoid) {
+        if (const char* value = std::getenv("EDEN_NX2_LSE_HOST_ATOMICS");
+            value && std::strtoul(value, nullptr, 10) != 0) {
+            config.optimizations |= Dynarmic::OptimizationFlag::Experimental_LseHostAtomics;
+        }
         // The JIT spilled ~9% of its instructions to stack slots in Ocarina of Time's hot code
         // while callee-saved GPRs sat empty: evictions go to a free callee-saved GPR first, and an
         // operand that is overwritten but still needed is copied to a free register instead.
