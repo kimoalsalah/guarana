@@ -323,6 +323,17 @@ public:
 
     bool OnCPUWrite(DAddr device_addr, u64 size);
 
+    [[nodiscard]] u64 AttributionLiveBuffers() const noexcept {
+        const size_t n = slot_buffers.size();
+        return n > 0 ? static_cast<u64>(n - 1) : 0;
+    }
+    [[nodiscard]] u64 BufferBytes() const noexcept {
+        return buffer_bytes;
+    }
+    [[nodiscard]] u64 AttributionRetiredBufferBytes() const noexcept {
+        return attribution_sentenced_total;
+    }
+
     void DownloadMemory(DAddr device_addr, u64 size);
 
     /// DownloadMemory for a guest CPU read: submits the copies without waiting for the host GPU,
@@ -817,6 +828,9 @@ private:
     static constexpr size_t TICKS_TO_DESTROY = 8;
 #endif
     DelayedDestructionRing<Buffer, TICKS_TO_DESTROY> delayed_destruction_ring;
+    std::array<u64, TICKS_TO_DESTROY> attribution_sentenced_bytes{};
+    size_t attribution_sentenced_index = 0;
+    u64 attribution_sentenced_total = 0;
 
     const Tegra::Engines::Maxwell3D::DrawManager::IndirectParams* current_draw_indirect{};
 

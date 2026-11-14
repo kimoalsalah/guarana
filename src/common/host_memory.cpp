@@ -27,6 +27,7 @@
 
 #if defined(__linux__)
 #include <sys/random.h>
+#include <sys/stat.h>
 #elif defined(__APPLE__)
 #include <sys/types.h>
 #include <sys/random.h>
@@ -57,6 +58,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <utility>
 
@@ -66,6 +68,7 @@
 #include "common/free_region_manager.h"
 #include "common/host_memory.h"
 #include "common/logging.h"
+#include "common/memory_attribution.h"
 #include "common/memory_detect.h"
 
 #if defined(__ANDROID__) && __ANDROID_API__ < 30
@@ -660,6 +663,17 @@ public:
                fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, static_cast<off_t>(offset),
                          static_cast<off_t>(length)) == 0;
     }
+
+    std::optional<u64> CommittedBytes() const noexcept {
+        if (fd < 0) {
+            return std::nullopt;
+        }
+        struct stat st{};
+        if (fstat(fd, &st) != 0 || st.st_blocks < 0) {
+            return std::nullopt;
+        }
+        return static_cast<u64>(st.st_blocks) * 512ULL;
+    }
 #endif
 
     bool Init() {
@@ -1053,6 +1067,7 @@ HostMemory::HostMemory(size_t backing_size_, size_t virtual_size_)
     : backing_size(allocation_test_control ? allocation_test_control->backing_size : backing_size_)
     , virtual_size(allocation_test_control ? allocation_test_control->virtual_size : virtual_size_)
     , num_granules(Common::DivCeil(backing_size, size_t{1} << GranuleShift))
+    , track_attribution(MemoryAttribution::Enabled())
 {
     granules = std::make_unique<std::atomic<u8>[]>(num_granules);
 #if defined(__OPENORBIS__) || defined(__managarm__)
@@ -1125,8 +1140,13 @@ void HostMemory::Swap(HostMemory& other) noexcept {
     std::swap(virtual_base_offset, other.virtual_base_offset);
     std::swap(granules, other.granules);
     std::swap(num_granules, other.num_granules);
+    const u64 used = used_granule_bytes.load(std::memory_order_relaxed);
+    used_granule_bytes.store(other.used_granule_bytes.load(std::memory_order_relaxed),
+                             std::memory_order_relaxed);
+    other.used_granule_bytes.store(used, std::memory_order_relaxed);
     std::swap(fallback_buffer, other.fallback_buffer);
     std::swap(lazy_commit, other.lazy_commit);
+    std::swap(track_attribution, other.track_attribution);
 }
 
 namespace {
@@ -1385,11 +1405,50 @@ void HostMemory::MarkUsed(size_t physical_offset, size_t length) {
         }
     }
 #endif
+    if (track_attribution) {
+        for (size_t index = physical_offset >> GranuleShift; index <= last; ++index) {
+            if ((granules[index].load(std::memory_order_relaxed) & GranuleUsed) == 0) {
+                const u8 prev = granules[index].fetch_or(GranuleUsed, std::memory_order_release);
+                if ((prev & GranuleUsed) == 0) {
+                    const size_t begin_offset = index << GranuleShift;
+                    const size_t end_offset = (std::min)((index + 1) << GranuleShift, backing_size);
+                    if (end_offset > begin_offset) {
+                        used_granule_bytes.fetch_add(static_cast<u64>(end_offset - begin_offset),
+                                                     std::memory_order_relaxed);
+                    }
+                }
+            }
+        }
+        return;
+    }
     for (size_t index = physical_offset >> GranuleShift; index <= last; ++index) {
         if ((granules[index].load(std::memory_order_relaxed) & GranuleUsed) == 0) {
             granules[index].fetch_or(GranuleUsed, std::memory_order_release);
         }
     }
+}
+
+u64 HostMemory::HandedOutBytes() const noexcept {
+    return backing_base != nullptr ? used_granule_bytes.load(std::memory_order_relaxed) : 0;
+}
+
+std::optional<u64> HostMemory::CommittedBytes() const noexcept {
+    if (backing_base == nullptr) {
+        return u64{0};
+    }
+#ifdef _WIN32
+    if (!fallback_buffer && lazy_commit) {
+        return g_memory_counters.guest_lazy_commit.load(std::memory_order_relaxed);
+    }
+    return impl ? static_cast<u64>(impl->backing_size) : static_cast<u64>(backing_size);
+#elif defined(__linux__)
+    if (!fallback_buffer && impl) {
+        return impl->CommittedBytes();
+    }
+    return std::nullopt;
+#else
+    return std::nullopt;
+#endif
 }
 
 void HostMemory::MarkDirty(size_t physical_offset, size_t length) {

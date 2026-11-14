@@ -17,6 +17,7 @@
 
 #include "common/assert.h"
 #include "common/cityhash.h"
+#include "common/memory_attribution.h"
 #include "shader_recompiler/frontend/maxwell/control_flow.h"
 #include "shader_recompiler/exception.h"
 #include "shader_recompiler/frontend/ampere/trap_guards.h"
@@ -453,9 +454,18 @@ void ShaderCache::Register(std::unique_ptr<ShaderInfo> data, VAddr addr, size_t 
         invalidation_cache[page].push_back(entry);
     }
 
+    if (Common::MemoryAttribution::Enabled()) {
+        attribution_lowered_bytes += sizeof(ShaderInfo) + data->owned_lowered_bytes;
+    }
+
     storage.push_back(std::move(data));
 
     device_memory.UpdatePagesCachedCount(addr, size, 1);
+}
+
+std::pair<u64, u64> ShaderCache::AttributionStats() const {
+    std::scoped_lock lock{lookup_mutex};
+    return {static_cast<u64>(storage.size()), attribution_lowered_bytes};
 }
 
 void ShaderCache::InvalidatePagesInRegion(VAddr addr, size_t size) {
@@ -501,15 +511,29 @@ void ShaderCache::RemovePendingShaders() {
     if (!removed_shaders.empty()) {
         Nx2FastDraw::Break(Nx2FastDraw::Reason::Invalidation);
         removal_serial.fetch_add(1, std::memory_order_release);
+        const auto on_remove = [this](const ShaderInfo& shader) {
+            if (Common::MemoryAttribution::Enabled()) {
+                const u64 bytes = sizeof(ShaderInfo) + shader.owned_lowered_bytes;
+                attribution_lowered_bytes -= (std::min)(attribution_lowered_bytes, bytes);
+            }
+        };
         if (removed_shaders.size() > 16) {
             std::ranges::sort(removed_shaders, std::less<ShaderInfo*>{});
-            std::erase_if(storage, [&removed_shaders](const std::unique_ptr<ShaderInfo>& shader) {
-                return std::binary_search(removed_shaders.begin(), removed_shaders.end(),
-                                          shader.get(), std::less<ShaderInfo*>{});
+            std::erase_if(storage, [&](const std::unique_ptr<ShaderInfo>& shader) {
+                if (!std::binary_search(removed_shaders.begin(), removed_shaders.end(),
+                                        shader.get(), std::less<ShaderInfo*>{})) {
+                    return false;
+                }
+                on_remove(*shader);
+                return true;
             });
         } else {
-            std::erase_if(storage, [&removed_shaders](const std::unique_ptr<ShaderInfo>& shader) {
-                return std::ranges::find(removed_shaders, shader.get()) != removed_shaders.end();
+            std::erase_if(storage, [&](const std::unique_ptr<ShaderInfo>& shader) {
+                if (std::ranges::find(removed_shaders, shader.get()) == removed_shaders.end()) {
+                    return false;
+                }
+                on_remove(*shader);
+                return true;
             });
         }
     }
@@ -576,6 +600,16 @@ const ShaderInfo* ShaderCache::MakeShaderInfo(GenericEnvironment& env, VAddr cpu
         info->size_bytes = env.ReadSizeBytes();
     }
     info->lowered_native = env.LoweredNative();
+    if (Common::MemoryAttribution::Enabled() && info->lowered_native &&
+        info->lowered_native.use_count() == 2) {
+        // Only `env` and `info` own this LoweredNativeCode (programs loaded from ShaderCacheV2
+        // keep a third reference in Cache::loaded and are counted under disk_v2 instead).
+        info->owned_lowered_bytes =
+            sizeof(LoweredNativeCode) +
+            static_cast<u64>(info->lowered_native->code.capacity()) * sizeof(u64) +
+            static_cast<u64>(info->lowered_native->trap_prefix.capacity()) *
+                sizeof(Shader::Ampere::Instruction);
+    }
     if (const auto record = env.TakeProgramRecord(); record && shader_cache_v2) {
         shader_cache_v2->RecordProgram(*record);
     }

@@ -90,6 +90,10 @@ public:
         return translation_generation.load(std::memory_order_acquire);
     }
 
+    [[nodiscard]] const DeviceMemory* PhysicalMemory() const noexcept {
+        return device_memory_ptr;
+    }
+
     // Write / Read
     template <typename T>
     T* GetPointer(DAddr address);

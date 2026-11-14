@@ -49,6 +49,9 @@ struct ShaderInfo {
     /// attribute as in FixedPipelineState::attribute_types. None for task and mesh programs, all
     /// set for any other program.
     u64 vertex_attribute_mask{~u64{0}};
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: heap bytes of a runtime-lowered LoweredNativeCode (0 when
+    /// shared with ShaderCacheV2::Cache::loaded).
+    u64 owned_lowered_bytes{};
 };
 
 /// A program of the current draw or dispatch, read back from GPU memory for a frame dump.
@@ -114,6 +117,9 @@ public:
         const std::array<u64, NUM_PROGRAMS>& unique_hashes) const;
     /// The program of the dispatch about to run, or nothing when it is not cached.
     [[nodiscard]] std::optional<CapturedProgram> CaptureComputeProgram() const;
+
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: {cached shader count, ShaderInfo + owned lowered bytes}.
+    [[nodiscard]] std::pair<u64, u64> AttributionStats() const;
 
 protected:
     struct GraphicsEnvironments {
@@ -210,6 +216,7 @@ private:
     ::Common::unordered_map<u64, std::vector<Entry*>> invalidation_cache;
     std::vector<std::unique_ptr<ShaderInfo>> storage;
     std::vector<Entry*> marked_for_removal;
+    u64 attribution_lowered_bytes{};
 
     /// Native programs the lowering rejected, by address, so each draw or dispatch rethrows the
     /// first error instead of lowering again; dropped when guest memory there is written.

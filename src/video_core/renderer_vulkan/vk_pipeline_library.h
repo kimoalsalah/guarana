@@ -194,6 +194,10 @@ public:
     /// Returns how many were released.
     size_t PruneUnused();
 
+    [[nodiscard]] u64 TotalLibraries() const noexcept {
+        return static_cast<u64>(total_libraries.load(std::memory_order_relaxed));
+    }
+
 private:
     struct Entry {
         std::mutex mutex;

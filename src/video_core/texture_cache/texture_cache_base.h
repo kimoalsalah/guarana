@@ -34,6 +34,7 @@
 #include <ranges>
 #include "common/scratch_buffer.h"
 #include "common/slot_vector.h"
+#include "video_core/texture_cache/image_attribution.h"
 #include "video_core/texture_cache/pending_download.h"
 #include "common/thread_worker.h"
 #include "video_core/compatible_formats.h"
@@ -299,6 +300,28 @@ public:
 
     /// Notify the cache that a new frame has been queued
     void TickFrame();
+
+    [[nodiscard]] u64 AttributionLiveImages() const noexcept {
+        return attribution_images.LiveImages();
+    }
+    [[nodiscard]] u64 AttributionLiveImageBytes() const noexcept {
+        return attribution_images.LiveImageBytes();
+    }
+    [[nodiscard]] u64 AttributionRetiredImageBytes() const noexcept {
+        return attribution_images.RetiredImageBytes();
+    }
+    [[nodiscard]] bool AttributionImageBytesEstimated() const noexcept {
+        return attribution_images.IsEstimated();
+    }
+    [[nodiscard]] u64 ExpectedMemoryBytes() const noexcept {
+        return expected_memory;
+    }
+    [[nodiscard]] u64 CriticalMemoryBytes() const noexcept {
+        return critical_memory;
+    }
+    [[nodiscard]] u64 MinimumMemoryBytes() const noexcept {
+        return minimum_memory;
+    }
 
     /// Return a constant reference to the given image view id
     [[nodiscard]] const ImageView& GetImageView(ImageViewId id) const noexcept;
@@ -694,6 +717,9 @@ private:
     u64 ImageMemoryBytes(const Image& image) const;
     /// The image's allocation size where the runtime reports one, else ImageMemoryBytes.
     u64 ImageAllocationBytes(const Image& image) const;
+    AttributionImageSize AttributionSizeOf(const Image& image);
+    u64 SnapshotAttributionBytes(const Image& image);
+    void UpdateAttributionBytes(const Image& image, u64 before_bytes);
 
     void QueueAsyncDecode(Image& image, ImageId image_id);
     void TickAsyncDecode();
@@ -803,6 +829,14 @@ private:
     u64 minimum_memory;
     u64 expected_memory;
     u64 critical_memory;
+#ifdef LICHII_LEGACY
+    static constexpr size_t TICKS_TO_DESTROY = 6;
+#else
+    static constexpr size_t TICKS_TO_DESTROY = 8;
+#endif
+    /// Declared before uncommitted_downloads and committed_downloads so shared_ptr deleters run
+    /// while retained_download_bytes is still alive.
+    ImageAttributionTracker<TICKS_TO_DESTROY> attribution_images{};
     size_t gpu_unswizzle_maxsize = 0;
     size_t swizzle_chunk_size = 0;
     u32 swizzle_slices_per_batch = 0;
@@ -836,11 +870,6 @@ private:
     };
     Common::LeastRecentlyUsedCache<LRUItemParams> lru_cache;
 
- #ifdef LICHII_LEGACY
-    static constexpr size_t TICKS_TO_DESTROY = 6;
- #else
-    static constexpr size_t TICKS_TO_DESTROY = 8;
-#endif
     DelayedDestructionRing<Image, TICKS_TO_DESTROY> sentenced_images;
     /// Device memory of the images in each slot of sentenced_images (same index): deleted, but
     /// counted in the driver's usage until the ring destroys them.
@@ -853,6 +882,7 @@ private:
     struct GpuSentencedImage {
         u64 tick;
         u64 bytes;
+        u64 attribution_bytes;
         Image image;
     };
     std::deque<GpuSentencedImage> gpu_sentenced_images;

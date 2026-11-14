@@ -22,6 +22,7 @@
 #include "common/bit_util.h"
 #include "common/div_ceil.h"
 #include "common/literals.h"
+#include "common/memory_attribution.h"
 #include "common/settings.h"
 #include "shader_recompiler/byte_addressed_image.h"
 #include "shader_recompiler/exception.h"
@@ -1433,6 +1434,9 @@ VkImageView TextureCacheRuntime::GetOrCreateResolveShadow(VkImage msaa_image, Vk
         shadow_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
     if (shadow.image) {
+        if (Common::MemoryAttribution::Enabled()) {
+            attribution_retired_shadow_image_bytes += shadow.image.GetMemoryBlock().size;
+        }
         pending_resolve_shadows.emplace_back(scheduler.CurrentTick(), std::move(shadow));
     }
     shadow.image = memory_allocator.CreateImage(VkImageCreateInfo{
@@ -1505,6 +1509,9 @@ void TextureCacheRuntime::EraseResolveShadow(VkImage msaa_image) {
         return;
     }
     if (it->second.image) {
+        if (Common::MemoryAttribution::Enabled()) {
+            attribution_retired_shadow_image_bytes += it->second.image.GetMemoryBlock().size;
+        }
         pending_resolve_shadows.emplace_back(scheduler.CurrentTick(), std::move(it->second));
     }
     resolve_shadows.erase(it);
@@ -1542,6 +1549,7 @@ ByteAddressedShadow TextureCacheRuntime::CreateByteAddressedShadow(const ImageVi
                                   FormatType::Optimal)) {
         throw Shader::RuntimeError("Unsupported packed R16 byte-addressed image binding");
     }
+    const u64 bridge_size = u64{view.size.width} * view.size.height * 2;
     PendingByteAddressedShadow pending{
         .tick = (std::numeric_limits<u64>::max)(),
         .image = memory_allocator.CreateImage(VkImageCreateInfo{
@@ -1561,11 +1569,15 @@ ByteAddressedShadow TextureCacheRuntime::CreateByteAddressedShadow(const ImageVi
         .view = {},
         .bridge = memory_allocator.CreateBuffer(VkBufferCreateInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .size = u64{view.size.width} * view.size.height * 2,
+            .size = bridge_size,
             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         }, MemoryUsage::DeviceLocal),
     };
+    if (Common::MemoryAttribution::Enabled()) {
+        pending.image_bytes = pending.image.GetMemoryBlock().size;
+        pending.bridge_bytes = bridge_size;
+    }
     pending.view = device.GetLogical().CreateImageView(VkImageViewCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = *pending.image,
@@ -1587,6 +1599,11 @@ ByteAddressedShadow TextureCacheRuntime::CreateByteAddressedShadow(const ImageVi
 void TextureCacheRuntime::RetireByteAddressedShadow(const ByteAddressedShadow& shadow) {
     for (auto& pending : pending_byte_addressed_shadows) {
         if (*pending.image == shadow.packed) {
+            if (Common::MemoryAttribution::Enabled() &&
+                pending.tick == (std::numeric_limits<u64>::max)()) {
+                attribution_retired_shadow_image_bytes += pending.image_bytes;
+                attribution_retired_shadow_buffer_bytes += pending.bridge_bytes;
+            }
             pending.tick = scheduler.CurrentTick();
             return;
         }
@@ -2980,6 +2997,13 @@ void TextureCacheRuntime::ReleaseMsaaScratchImage(VkImage image) {
 void TextureCacheRuntime::TickFrame() {
     while (!pending_byte_addressed_shadows.empty() &&
            scheduler.IsFree(pending_byte_addressed_shadows.front().tick)) {
+        if (Common::MemoryAttribution::Enabled()) {
+            const auto& front = pending_byte_addressed_shadows.front();
+            attribution_retired_shadow_image_bytes -=
+                (std::min)(attribution_retired_shadow_image_bytes, front.image_bytes);
+            attribution_retired_shadow_buffer_bytes -=
+                (std::min)(attribution_retired_shadow_buffer_bytes, front.bridge_bytes);
+        }
         pending_byte_addressed_shadows.pop_front();
     }
     static constexpr u32 MAX_UNUSED_SCRATCH_FRAMES = 60;
@@ -2998,16 +3022,30 @@ void TextureCacheRuntime::TickFrame() {
     }
     while (!pending_transcodes.empty() && scheduler.IsFree(pending_transcodes.front().tick)) {
         PendingTranscode& done = pending_transcodes.front();
+        if (Common::MemoryAttribution::Enabled()) {
+            attribution_pending_transcode_bytes -=
+                (std::min)(attribution_pending_transcode_bytes, done.allocation_bytes);
+        }
         const u64 bytes = decode_bytes(done);
         if (free_bytes + bytes <= MaxFreeTranscodeBytes) {
             done.unused_frames = 0;
             free_bytes += bytes;
+            if (Common::MemoryAttribution::Enabled()) {
+                attribution_free_transcode_bytes += done.allocation_bytes;
+            }
             free_transcodes.push_back(std::move(done));
         }
         pending_transcodes.pop_front();
     }
-    std::erase_if(free_transcodes, [](PendingTranscode& t) {
-        return ++t.unused_frames > MAX_UNUSED_SCRATCH_FRAMES;
+    std::erase_if(free_transcodes, [this](PendingTranscode& t) {
+        if (++t.unused_frames <= MAX_UNUSED_SCRATCH_FRAMES) {
+            return false;
+        }
+        if (Common::MemoryAttribution::Enabled()) {
+            attribution_free_transcode_bytes -=
+                (std::min)(attribution_free_transcode_bytes, t.allocation_bytes);
+        }
+        return true;
     });
     std::erase_if(msaa_scratch_images, [this](MsaaScratchImage& scratch) {
         if (!scheduler.IsFree(scratch.tick)) {
@@ -3017,7 +3055,15 @@ void TextureCacheRuntime::TickFrame() {
         return ++scratch.unused_frames > MAX_UNUSED_SCRATCH_FRAMES;
     });
     std::erase_if(pending_resolve_shadows, [this](const auto& pending) {
-        return scheduler.IsFree(pending.first);
+        if (!scheduler.IsFree(pending.first)) {
+            return false;
+        }
+        if (Common::MemoryAttribution::Enabled() && pending.second.image) {
+            attribution_retired_shadow_image_bytes -=
+                (std::min)(attribution_retired_shadow_image_bytes,
+                           pending.second.image.GetMemoryBlock().size);
+        }
+        return true;
     });
 }
 
@@ -5211,6 +5257,10 @@ void TextureCacheRuntime::TranscodeAstcToBcn(
         if (reusable == free_transcodes.end()) {
             return false;
         }
+        if (Common::MemoryAttribution::Enabled()) {
+            attribution_free_transcode_bytes -=
+                (std::min)(attribution_free_transcode_bytes, reusable->allocation_bytes);
+        }
         out = std::move(*reusable);
         free_transcodes.erase(reusable);
         return true;
@@ -5258,6 +5308,9 @@ void TextureCacheRuntime::TranscodeAstcToBcn(
         if (!decode && !reused && !free_transcodes.empty()) {
             // The GPU is done with these: their memory goes back to the driver now.
             free_transcodes.clear();
+            if (Common::MemoryAttribution::Enabled()) {
+                attribution_free_transcode_bytes = 0;
+            }
             decode = make_decode(batch);
         }
         while (!decode && !reused && batch > 1) {
@@ -5286,6 +5339,17 @@ void TextureCacheRuntime::TranscodeAstcToBcn(
             }
         }
         if (!reused) {
+            u64 alloc_bytes = 0;
+            if (Common::MemoryAttribution::Enabled()) {
+                alloc_bytes = decode.GetMemoryBlock().size;
+                if (alloc_bytes == 0) {
+                    for (u32 level = 0; level < levels; ++level) {
+                        alloc_bytes += u64{(std::max)(width >> level, 1U)} *
+                                       (std::max)(height >> level, 1U) * 4;
+                    }
+                    alloc_bytes *= batch;
+                }
+            }
             pending = PendingTranscode{
                 .tick = 0,
                 .image = std::move(decode),
@@ -5295,6 +5359,7 @@ void TextureCacheRuntime::TranscodeAstcToBcn(
                 .levels = levels,
                 .layers = batch,
                 .unused_frames = 0,
+                .allocation_bytes = alloc_bytes,
             };
             for (u32 level = 0; level < levels; ++level) {
                 pending.views.push_back(
@@ -5382,6 +5447,9 @@ void TextureCacheRuntime::TranscodeAstcToBcn(
     });
     image.UploadMemory(output.buffer, output.offset, copies);
     pending.tick = scheduler.CurrentTick();
+    if (Common::MemoryAttribution::Enabled()) {
+        attribution_pending_transcode_bytes += pending.allocation_bytes;
+    }
     pending_transcodes.push_back(std::move(pending));
 }
 

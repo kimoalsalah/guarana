@@ -344,6 +344,13 @@ public:
         multi_range_buffers.DropOwner(scheduler, buffer.Handle());
     }
 
+    [[nodiscard]] u64 AttributionGatheredBytes() const noexcept {
+        return multi_range_buffers.LiveGatheredBytes();
+    }
+    [[nodiscard]] u64 AttributionRetiredGatheredBytes() const noexcept {
+        return multi_range_buffers.RetiredGatheredBytes();
+    }
+
     void BindUniformBuffer(const Buffer& buffer, u32 offset, u32 size) {
         BindBuffer(buffer, offset, size);
     }

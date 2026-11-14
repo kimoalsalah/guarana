@@ -14,6 +14,7 @@
 #include "common/bit_util.h"
 #include "common/common_types.h"
 #include "common/literals.h"
+#include "common/memory_attribution.h"
 #include "video_core/nx2_stutter_trace.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
@@ -288,6 +289,9 @@ StagingBufferRef StagingBufferPool::CreateStagingBuffer(size_t size, MemoryUsage
         .tick = deferred ? (std::numeric_limits<u64>::max)() : scheduler.CurrentTick(),
         .deferred = deferred,
     });
+    if (Common::MemoryAttribution::Enabled()) {
+        AttributionBytesRef(usage) += u64{1} << log2_size;
+    }
     return entry.Ref();
 }
 
@@ -305,6 +309,33 @@ StagingBufferPool::StagingBuffersCache& StagingBufferPool::GetCache(MemoryUsage 
     }
 }
 
+u64& StagingBufferPool::AttributionBytesRef(MemoryUsage usage) noexcept {
+    switch (usage) {
+    case MemoryUsage::DeviceLocal:
+        return attribution_device_local_bytes;
+    case MemoryUsage::Upload:
+        return attribution_upload_bytes;
+    case MemoryUsage::Download:
+        return attribution_download_bytes;
+    default:
+        ASSERT_MSG(false, "Invalid memory usage={}", usage);
+        return attribution_upload_bytes;
+    }
+}
+
+u64 StagingBufferPool::AttributionCachedBytes(MemoryUsage usage) const noexcept {
+    switch (usage) {
+    case MemoryUsage::DeviceLocal:
+        return attribution_device_local_bytes;
+    case MemoryUsage::Upload:
+        return attribution_upload_bytes;
+    case MemoryUsage::Download:
+        return attribution_download_bytes;
+    default:
+        return 0;
+    }
+}
+
 u64 StagingBufferPool::CachedBytes(MemoryUsage usage) {
     u64 bytes{};
     const StagingBuffersCache& cache = GetCache(usage);
@@ -317,7 +348,20 @@ u64 StagingBufferPool::CachedBytes(MemoryUsage usage) {
 }
 
 void StagingBufferPool::ReleaseCache(MemoryUsage usage) {
-    ReleaseLevel(GetCache(usage), current_delete_level);
+    StagingBuffersCache& cache = GetCache(usage);
+    const size_t level = current_delete_level;
+    if (!Common::MemoryAttribution::Enabled()) {
+        ReleaseLevel(cache, level);
+        return;
+    }
+    const size_t old_count = cache[level].entries.size();
+    ReleaseLevel(cache, level);
+    const size_t removed = old_count - cache[level].entries.size();
+    if (removed > 0) {
+        u64& counter = AttributionBytesRef(usage);
+        const u64 freed = u64{removed} << level;
+        counter = counter >= freed ? counter - freed : 0;
+    }
 }
 
 void StagingBufferPool::ReleaseLevel(StagingBuffersCache& cache, size_t log2) {

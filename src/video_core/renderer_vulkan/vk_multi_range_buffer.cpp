@@ -5,6 +5,7 @@
 #include <mutex>
 #include <utility>
 
+#include "common/memory_attribution.h"
 #include "video_core/renderer_vulkan/vk_multi_range_buffer.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/vulkan_common/vulkan_device.h"
@@ -185,10 +186,17 @@ void MultiRangeBufferCache::RetireEntry(Scheduler& scheduler, Entry& entry) {
         scheduler.Wait(oldest);
         DrainRetired(scheduler);
     }
+    const u64 retired_bytes = entry.gathered_bytes;
+    if (Common::MemoryAttribution::Enabled() && retired_bytes != 0) {
+        live_gathered_bytes -= (std::min)(live_gathered_bytes, retired_bytes);
+        retired_gathered_bytes += retired_bytes;
+        entry.gathered_bytes = 0;
+    }
     retired.push_back(Retired{
         .handle = std::move(entry.sparse_handle),
         .gathered = std::move(entry.gathered),
         .tick = scheduler.CurrentTick(),
+        .gathered_bytes = retired_bytes,
     });
 }
 
@@ -196,6 +204,10 @@ void MultiRangeBufferCache::DrainRetired(Scheduler& scheduler) {
     size_t index = 0;
     while (index < retired.size()) {
         if (scheduler.IsFree(retired[index].tick)) {
+            if (Common::MemoryAttribution::Enabled() && retired[index].gathered_bytes != 0) {
+                retired_gathered_bytes -=
+                    (std::min)(retired_gathered_bytes, retired[index].gathered_bytes);
+            }
             if (index + 1 != retired.size()) {
                 retired[index] = std::move(retired.back());
             }
@@ -278,6 +290,10 @@ MultiRangeRef MultiRangeBufferCache::Get(const Device& device, Scheduler& schedu
         };
         entry.gathered = memory_allocator.CreateBuffer(gather_ci, MemoryUsage::DeviceLocal);
         entry.dirty = true;
+        if (Common::MemoryAttribution::Enabled() && entry.gathered) {
+            entry.gathered_bytes = static_cast<u64>(total);
+            live_gathered_bytes += entry.gathered_bytes;
+        }
     }
     if (device.IsBufferDeviceAddressSupported()) {
         VkBuffer address_handle = *entry.sparse_handle;

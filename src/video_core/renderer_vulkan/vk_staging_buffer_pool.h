@@ -50,6 +50,13 @@ public:
     /// Bytes of the cached staging buffers of a kind, idle or in use (EDEN_NX2_MEM_TRACE).
     [[nodiscard]] u64 CachedBytes(MemoryUsage usage);
 
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: O(1) tracked bytes of cached staging buffers of a kind.
+    [[nodiscard]] u64 AttributionCachedBytes(MemoryUsage usage) const noexcept;
+
+    [[nodiscard]] u64 StreamBufferBytes() const noexcept {
+        return static_cast<u64>(stream_pointer.size());
+    }
+
 private:
     struct StreamBufferCommit {
         size_t upper_bound;
@@ -100,6 +107,7 @@ private:
     StagingBufferRef CreateStagingBuffer(size_t size, MemoryUsage usage, bool deferred);
 
     StagingBuffersCache& GetCache(MemoryUsage usage);
+    u64& AttributionBytesRef(MemoryUsage usage) noexcept;
 
     void ReleaseCache(MemoryUsage usage);
 
@@ -130,6 +138,9 @@ private:
     size_t current_delete_level = 0;
     u64 buffer_index = 0;
     u64 unique_ids{};
+    u64 attribution_device_local_bytes = 0;
+    u64 attribution_upload_bytes = 0;
+    u64 attribution_download_bytes = 0;
 };
 
 } // namespace Vulkan

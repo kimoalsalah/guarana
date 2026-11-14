@@ -16,6 +16,7 @@
 #include "common/common_types.h"
 #include "common/dkb_cpu_trace.h"
 #include "common/dkb_frame_trace.h"
+#include "common/memory_attribution.h"
 #include "video_core/control/channel_state_cache.h"
 #include "video_core/engines/maxwell_dma.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
@@ -303,6 +304,7 @@ private:
     void ReadOcarinaActor(struct OcarinaActorMesh& mesh);
     /// Records the uniform and storage buffers of the current draw or dispatch for the frame dump.
     bool FrameDumpBuffers(bool compute, std::span<const u64> shader_hashes);
+    void LogMemoryAttribution(std::string_view reason);
 
     Tegra::GPU& gpu;
     Tegra::MaxwellDeviceMemoryManager& device_memory;
@@ -616,6 +618,7 @@ private:
     u32 trace_captures{};
     u32 trace_capture_dropped{};
     u32 trace_failure_details{};
+    Common::MemoryAttribution::PeriodTimer memory_attribution_timer{};
 };
 
 } // namespace Vulkan

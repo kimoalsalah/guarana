@@ -244,6 +244,9 @@ public:
 
     void Add(const ShaderTranslationKey& key, std::shared_ptr<const ReusableShaders> shaders);
 
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: {cached shader set count, compressed SPIR-V bytes}.
+    [[nodiscard]] std::pair<u64, u64> AttributionStats() const;
+
 private:
     /// Variants kept per key: same programs and state, different environment answers (say, a
     /// texture bound as 2D by one pipeline and as an array by another). Further ones are not
@@ -259,10 +262,11 @@ private:
     /// Drops the least recently used quarter of the keys. Called with the mutex held.
     void EvictLeastRecentlyUsed();
 
-    std::mutex mutex;
+    mutable std::mutex mutex;
     ::Common::unordered_map<ShaderTranslationKey, Entry, ShaderTranslationKeyHash> entries;
     u64 use_counter{};
     size_t num_shaders{}; ///< Shader sets in entries.
+    u64 attribution_spirv_bytes{};
 };
 
 } // namespace Vulkan

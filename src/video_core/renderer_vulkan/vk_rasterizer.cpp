@@ -34,6 +34,7 @@
 #include "common/memory_detect.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
+#include "core/device_memory.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 #include "video_core/control/channel_state.h"
@@ -693,6 +694,9 @@ RasterizerVulkan::~RasterizerVulkan() {
     state_tracker.ClearChannel();
     scheduler.WaitWorker();
     scheduler.Finish();
+    if (Common::MemoryAttribution::Enabled()) {
+        LogMemoryAttribution("shutdown");
+    }
 }
 
 GraphicsPipeline* RasterizerVulkan::TakeReusableDraw(bool is_indexed, bool is_indirect) {
@@ -4290,6 +4294,69 @@ void RasterizerVulkan::TickFrame() {
         std::scoped_lock lock{buffer_cache.mutex};
         buffer_cache.TickFrame();
     }
+    if (Common::MemoryAttribution::Enabled() &&
+        memory_attribution_timer.Ready(std::chrono::steady_clock::now())) {
+        LogMemoryAttribution("10s");
+    }
+}
+
+void RasterizerVulkan::LogMemoryAttribution(std::string_view reason) {
+    Common::MemoryAttribution::Report report{};
+
+    const Common::ProcessMemoryUsage proc = Common::GetProcessMemoryUsage();
+    report.process_commit_bytes = proc.commit;
+    report.process_working_set_bytes = proc.working_set;
+    report.process_private_working_set_bytes = proc.private_working_set;
+
+    if (const Core::DeviceMemory* const phys = device_memory.PhysicalMemory(); phys != nullptr) {
+        report.guest_committed_bytes = phys->buffer.CommittedBytes();
+        report.guest_handed_out_bytes = phys->buffer.HandedOutBytes();
+    } else {
+        report.guest_committed_bytes = u64{0};
+    }
+
+    u64 retired_tex_images = 0;
+    u64 retired_shadow_images = 0;
+    u64 retired_shadow_buffers = 0;
+    {
+        std::scoped_lock lock{texture_cache.mutex};
+        report.live_images = texture_cache.AttributionLiveImages();
+        report.live_image_bytes = texture_cache.AttributionLiveImageBytes();
+        report.image_bytes_estimated = texture_cache.AttributionImageBytesEstimated();
+        report.texture_expected_bytes = texture_cache.ExpectedMemoryBytes();
+        report.texture_critical_bytes = texture_cache.CriticalMemoryBytes();
+        report.texture_minimum_bytes = texture_cache.MinimumMemoryBytes();
+        retired_tex_images = texture_cache.AttributionRetiredImageBytes();
+        report.transcode_in_flight_bytes =
+            texture_cache_runtime.AttributionPendingTranscodeBytes();
+        report.transcode_idle_bytes = texture_cache_runtime.AttributionFreeTranscodeBytes();
+        retired_shadow_images = texture_cache_runtime.AttributionRetiredShadowImageBytes();
+        retired_shadow_buffers = texture_cache_runtime.AttributionRetiredShadowBufferBytes();
+    }
+
+    u64 retired_cache_buffers = 0;
+    u64 retired_gathered_buffers = 0;
+    {
+        std::scoped_lock lock{buffer_cache.mutex};
+        report.live_buffers = buffer_cache.AttributionLiveBuffers();
+        report.buffer_cache_bytes = buffer_cache.BufferBytes();
+        report.multi_range_gathered_bytes = buffer_cache_runtime.AttributionGatheredBytes();
+        retired_cache_buffers = buffer_cache.AttributionRetiredBufferBytes();
+        retired_gathered_buffers = buffer_cache_runtime.AttributionRetiredGatheredBytes();
+    }
+
+    report.retired_image_bytes = retired_tex_images + retired_shadow_images;
+    report.retired_buffer_bytes =
+        retired_cache_buffers + retired_gathered_buffers + retired_shadow_buffers;
+
+    report.stream_staging_bytes = staging_pool.StreamBufferBytes();
+    report.upload_staging_bytes = staging_pool.AttributionCachedBytes(MemoryUsage::Upload);
+    report.download_staging_bytes = staging_pool.AttributionCachedBytes(MemoryUsage::Download);
+    report.device_staging_bytes = staging_pool.AttributionCachedBytes(MemoryUsage::DeviceLocal);
+
+    pipeline_cache.FillMemoryAttribution(report);
+
+    LOG_INFO(Render_Vulkan, "{}", Common::MemoryAttribution::FormatReport(reason, report));
 }
 
 bool RasterizerVulkan::AccelerateConditionalRendering() {

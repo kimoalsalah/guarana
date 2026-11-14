@@ -37,6 +37,10 @@ public:
         return control.fallback_attempts;
     }
 
+    static void EnableAttribution(HostMemory& memory) noexcept {
+        memory.track_attribution = true;
+    }
+
 private:
     HostMemory::AllocationTestControl* previous;
     HostMemory::AllocationTestControl control;

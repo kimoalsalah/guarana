@@ -33,6 +33,7 @@
 #include "common/settings.h"
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
+#include "common/memory_attribution.h"
 #include "common/memory_detect.h"
 #include "common/scope_exit.h"
 #include "common/shutdown_progress.h"
@@ -3372,6 +3373,36 @@ void PipelineCache::TickFrame() {
             prebuild_load_begin.reset();
         }
     }
+}
+
+void PipelineCache::FillMemoryAttribution(Common::MemoryAttribution::Report& report) const {
+    const auto [sc_entries, sc_bytes] = AttributionStats();
+    report.shader_cache_entries = sc_entries;
+    report.shader_cache_owned_bytes = sc_bytes;
+    if (cache_v2) {
+        const auto [v2_entries, v2_bytes] = cache_v2->AttributionLoadedStats();
+        report.shader_cache_v2_entries = v2_entries;
+        report.shader_cache_v2_bytes = v2_bytes;
+    }
+    const auto [reuse_entries, reuse_bytes] = shader_reuse.AttributionStats();
+    report.shader_reuse_entries = reuse_entries;
+    report.shader_reuse_bytes = reuse_bytes;
+    report.kept_spirv_entries = static_cast<u64>(kept_stages.Size());
+    report.kept_spirv_bytes = kept_stages.Bytes();
+    report.graphics_pipelines = static_cast<u64>(graphics_cache.size());
+    report.retired_graphics_pipelines = static_cast<u64>(evicted_pipelines.size());
+    report.graphics_libraries = graphics_libraries.TotalLibraries();
+    report.compute_pipelines = static_cast<u64>(compute_cache.size());
+    report.retired_compute_pipelines = static_cast<u64>(retired_compute_pipelines.size());
+    report.in_flight_ir_bytes =
+        queued_ir.QueuedBytes() + (shader_jobs ? shader_jobs->Stats().in_flight_bytes : 0);
+
+    u64 blob_bytes = static_cast<u64>(last_cache_size.load(std::memory_order_relaxed));
+    if (std::unique_lock lock{vulkan_cache_save_mutex, std::try_to_lock}; lock.owns_lock()) {
+        blob_bytes = (std::max)(blob_bytes, static_cast<u64>(saved_cache_size));
+    }
+    report.driver_cache_blob_bytes = blob_bytes;
+    report.pipeline_binary_index_entries = pipeline_binaries ? pipeline_binaries->IndexSize() : 0;
 }
 
 void PipelineCache::DropPipelinesWithoutPrepass() {

@@ -8,6 +8,7 @@
 
 #include "common/assert.h"
 #include "common/logging.h"
+#include "common/memory_attribution.h"
 #include "video_core/native_lowering.h"
 #include "video_core/nx2_stutter_trace.h"
 #include "video_core/shader_cache_v2/cache.h"
@@ -121,6 +122,25 @@ void Cache::LoadPrograms(std::span<const LogRecord> live, const ForEach& for_eac
             table.insert_or_assign(program.entry->key, LoadedProgram{std::move(*program.record),
                                                                      std::move(program.code)});
         }
+    }
+    if (Common::MemoryAttribution::Enabled()) {
+        u64 bytes = 0;
+        for (const auto& pair : table) {
+            const LoadedProgram& entry = pair.second;
+            bytes += sizeof(LoadedProgram);
+            bytes += static_cast<u64>(entry.record.native.capacity()) *
+                     sizeof(Shader::Ampere::Instruction);
+            bytes += static_cast<u64>(entry.record.verified_traps.capacity()) * sizeof(u32);
+            bytes += static_cast<u64>(entry.record.lowered_code.capacity()) * sizeof(u64);
+            if (entry.code) {
+                bytes += sizeof(LoweredNativeCode);
+                bytes += static_cast<u64>(entry.code->code.capacity()) * sizeof(u64);
+                bytes += static_cast<u64>(entry.code->trap_prefix.capacity()) *
+                         sizeof(Shader::Ampere::Instruction);
+            }
+        }
+        attribution_loaded_entries = static_cast<u64>(table.size());
+        attribution_loaded_bytes = bytes;
     }
     loaded = std::move(table);
     loaded_ready.store(true, std::memory_order_release);

@@ -11,6 +11,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include "common/common_types.h"
 #include "video_core/shader_cache_v2/cache_format.h"
@@ -77,6 +78,14 @@ public:
     /// code only when a later boot load does
     void KeepStalePrograms();
 
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: {loaded program count, approximate owned heap bytes}.
+    [[nodiscard]] std::pair<u64, u64> AttributionLoadedStats() const noexcept {
+        if (!loaded_ready.load(std::memory_order_acquire)) {
+            return {0, 0};
+        }
+        return {attribution_loaded_entries, attribution_loaded_bytes};
+    }
+
 private:
     /// A record of this build's lowering, its code moved out into `code`
     struct LoadedProgram {
@@ -95,6 +104,8 @@ private:
     bool keep_stale{};                     ///< Under mutex
     /// Written by LoadPrograms only before `loaded_ready` is set, then never changed
     std::unordered_map<u64, LoadedProgram> loaded;
+    u64 attribution_loaded_entries{};
+    u64 attribution_loaded_bytes{};
     std::atomic<bool> loaded_ready{};
     std::array<ProgramCounts, static_cast<size_t>(ProgramLookup::Count)> counts;
     CacheWriter writer;
