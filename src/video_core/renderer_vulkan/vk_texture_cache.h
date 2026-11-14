@@ -141,6 +141,19 @@ public:
     /// Bytes of the cached staging buffers of every kind.
     u64 StagingBytes();
 
+    [[nodiscard]] u64 AttributionPendingTranscodeBytes() const noexcept {
+        return attribution_pending_transcode_bytes;
+    }
+    [[nodiscard]] u64 AttributionFreeTranscodeBytes() const noexcept {
+        return attribution_free_transcode_bytes;
+    }
+    [[nodiscard]] u64 AttributionRetiredShadowImageBytes() const noexcept {
+        return attribution_retired_shadow_image_bytes;
+    }
+    [[nodiscard]] u64 AttributionRetiredShadowBufferBytes() const noexcept {
+        return attribution_retired_shadow_buffer_bytes;
+    }
+
     /// True when ASTC is re-compressed to BC3 and opaque images may use BC1 instead.
     bool UseOpaqueAstcFormat() const;
 
@@ -325,10 +338,13 @@ public:
         u32 levels;
         u32 layers;
         u32 unused_frames;
+        u64 allocation_bytes{};
     };
     std::deque<PendingTranscode> pending_transcodes;
     /// Decode images the GPU is done with, for the next texture of the same shape.
     std::vector<PendingTranscode> free_transcodes;
+    u64 attribution_pending_transcode_bytes{};
+    u64 attribution_free_transcode_bytes{};
 
     std::optional<BlockLinearUnswizzle3DPass> bl3d_unswizzle_pass;
     const Settings::ResolutionScalingInfo& resolution;
@@ -366,8 +382,12 @@ public:
         vk::Image image;
         vk::ImageView view;
         vk::Buffer bridge;
+        u64 image_bytes{};
+        u64 bridge_bytes{};
     };
     std::deque<PendingByteAddressedShadow> pending_byte_addressed_shadows;
+    u64 attribution_retired_shadow_image_bytes{};
+    u64 attribution_retired_shadow_buffer_bytes{};
 };
 
 class Framebuffer {
@@ -543,6 +563,13 @@ public:
     /// Where the image's memory lies, for the collector (TextureCache::RunGarbageCollector).
     [[nodiscard]] vk::Image::MemoryBlock MemoryBlock() const noexcept {
         return original_image.GetMemoryBlock();
+    }
+
+    /// Total device memory allocated directly for this image (base, sparse backing, and scaled
+    /// copy), for EDEN_NX2_MEMORY_ATTRIBUTION.
+    [[nodiscard]] u64 AllocationBytes() const noexcept {
+        return original_image.GetMemoryBlock().size + sparse_layers.bound_bytes +
+               scaled_image.GetMemoryBlock().size;
     }
 
     /// Returns true when the image is already initialized and mark it as initialized

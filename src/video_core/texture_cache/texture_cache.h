@@ -21,6 +21,7 @@
 #include <boost/container/small_vector.hpp>
 
 #include "common/alignment.h"
+#include "common/memory_attribution.h"
 #include "common/memory_detect.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
@@ -681,6 +682,9 @@ void TextureCache<P>::TickFrame() {
         while (!gpu_sentenced_images.empty() &&
                runtime.IsFree(gpu_sentenced_images.front().tick)) {
             gpu_sentenced_bytes -= gpu_sentenced_images.front().bytes;
+            if (Common::MemoryAttribution::Enabled()) {
+                attribution_images.RetireGpu(gpu_sentenced_images.front().attribution_bytes);
+            }
             gpu_sentenced_images.pop_front();
         }
     }
@@ -1090,6 +1094,9 @@ void TextureCache<P>::TickFrame() {
     sentenced_images.Tick();
     sentenced_image_index = (sentenced_image_index + 1) % TICKS_TO_DESTROY;
     sentenced_image_bytes[sentenced_image_index] = 0;
+    if (Common::MemoryAttribution::Enabled()) {
+        attribution_images.AdvanceRingSlot(sentenced_image_index);
+    }
     sentenced_framebuffers.Tick();
     sentenced_image_view.Tick();
     TickAsyncDecode();
@@ -2995,10 +3002,15 @@ template <class P>
 bool TextureCache<P>::BindSparseTiles(Image& image, std::span<const LevelRect> rects) {
     if constexpr (requires { &Image::BindTiles; }) {
         const u64 bound_bytes = ImageMemoryBytes(image);
+        const u64 old_attr =
+            Common::MemoryAttribution::Enabled() ? SnapshotAttributionBytes(image) : 0;
         const bool bound = image.BindTiles(rects);
         // RegisterImage counts what an image has bound by then; later binds are added here.
         if (True(image.flags & ImageFlagBits::Registered)) {
             total_used_memory += ImageMemoryBytes(image) - bound_bytes;
+            if (Common::MemoryAttribution::Enabled()) {
+                UpdateAttributionBytes(image, old_attr);
+            }
         }
         return bound;
     } else {
@@ -3010,9 +3022,14 @@ template <class P>
 bool TextureCache<P>::BackSparseTilesWhole(Image& image) {
     if constexpr (requires { &Image::BackTilesWhole; }) {
         const u64 bound_bytes = ImageMemoryBytes(image);
+        const u64 old_attr =
+            Common::MemoryAttribution::Enabled() ? SnapshotAttributionBytes(image) : 0;
         const bool backed = image.BackTilesWhole();
         if (True(image.flags & ImageFlagBits::Registered)) {
             total_used_memory += ImageMemoryBytes(image) - bound_bytes;
+            if (Common::MemoryAttribution::Enabled()) {
+                UpdateAttributionBytes(image, old_attr);
+            }
         }
         return backed;
     } else {
@@ -3074,10 +3091,15 @@ template <class P>
 std::vector<u32> TextureCache<P>::BindSparseLayers(Image& image, std::span<const u32> layers) {
     if constexpr (requires { &Image::BindLayers; }) {
         const u64 bound_bytes = ImageMemoryBytes(image);
+        const u64 old_attr =
+            Common::MemoryAttribution::Enabled() ? SnapshotAttributionBytes(image) : 0;
         std::vector<u32> bound = image.BindLayers(layers);
         // RegisterImage counts what an image has bound by then; later binds are added here.
         if (True(image.flags & ImageFlagBits::Registered)) {
             total_used_memory += ImageMemoryBytes(image) - bound_bytes;
+            if (Common::MemoryAttribution::Enabled()) {
+                UpdateAttributionBytes(image, old_attr);
+            }
         }
         return bound;
     } else {
@@ -3423,6 +3445,40 @@ u64 TextureCache<P>::ImageAllocationBytes(const Image& image) const {
 }
 
 template <class P>
+AttributionImageSize TextureCache<P>::AttributionSizeOf(const Image& image) {
+    if constexpr (requires { image.AllocationBytes(); }) {
+        return QueryImageAttributionSize(image, 0, 0);
+    } else {
+        return QueryImageAttributionSize(image, ImageAllocationBytes(image),
+                                         image.HasScaled() ? GetScaledImageSizeBytes(image) : 0);
+    }
+}
+
+template <class P>
+u64 TextureCache<P>::SnapshotAttributionBytes(const Image& image) {
+    const bool is_registered = True(image.flags & ImageFlagBits::Registered);
+    if constexpr (requires { image.AllocationBytes(); }) {
+        return attribution_images.SnapshotLiveBytes(image, is_registered, 0, 0);
+    } else {
+        return attribution_images.SnapshotLiveBytes(
+            image, is_registered, ImageAllocationBytes(image),
+            image.HasScaled() ? GetScaledImageSizeBytes(image) : 0);
+    }
+}
+
+template <class P>
+void TextureCache<P>::UpdateAttributionBytes(const Image& image, u64 before_bytes) {
+    const bool is_registered = True(image.flags & ImageFlagBits::Registered);
+    if constexpr (requires { image.AllocationBytes(); }) {
+        attribution_images.UpdateLiveBytes(image, is_registered, before_bytes, 0, 0);
+    } else {
+        attribution_images.UpdateLiveBytes(image, is_registered, before_bytes,
+                                           ImageAllocationBytes(image),
+                                           image.HasScaled() ? GetScaledImageSizeBytes(image) : 0);
+    }
+}
+
+template <class P>
 void TextureCache<P>::QueueAsyncDecode(Image& image, ImageId image_id) {
     UNIMPLEMENTED_IF(False(image.flags & ImageFlagBits::Converted));
     LOG_DEBUG(HW_GPU, "Queuing async texture decode {:#x}", image.gpu_addr);
@@ -3600,9 +3656,14 @@ void TextureCache<P>::TickAsyncUnswizzle() {
 template <class P>
 bool TextureCache<P>::ScaleUp(Image& image) {
     const bool has_copy = image.HasScaled();
+    const u64 old_attr =
+        Common::MemoryAttribution::Enabled() ? SnapshotAttributionBytes(image) : 0;
     const bool rescaled = image.ScaleUp();
     if (!has_copy && image.HasScaled()) {
         total_used_memory += GetScaledImageSizeBytes(image);
+    }
+    if (Common::MemoryAttribution::Enabled()) {
+        UpdateAttributionBytes(image, old_attr);
     }
     if (!rescaled) {
         return false;
@@ -4537,7 +4598,17 @@ void TextureCache<P>::RegisterImage(ImageId image_id) {
     image.flags |= ImageFlagBits::Registered;
     image.channel = current_channel_id;
     image.address_space = current_address_space;
-    total_used_memory += ImageMemoryBytes(slot_images[image_id]);
+    const Image& full_image = slot_images[image_id];
+    total_used_memory += ImageMemoryBytes(full_image);
+    if (Common::MemoryAttribution::Enabled()) {
+        if constexpr (requires { full_image.AllocationBytes(); }) {
+            attribution_images.Register(full_image, 0, 0);
+        } else {
+            attribution_images.Register(
+                full_image, ImageAllocationBytes(full_image),
+                full_image.HasScaled() ? GetScaledImageSizeBytes(full_image) : 0);
+        }
+    }
     image.lru_index = lru_cache.Insert(image_id, frame_tick);
 
     ForEachGPUPage(image.gpu_addr, image.guest_size_bytes, [this, image_id](u64 page) {
@@ -4603,6 +4674,15 @@ void TextureCache<P>::UnregisterImage(ImageId image_id) {
     Image& image = slot_images[image_id];
     ASSERT_MSG(True(image.flags & ImageFlagBits::Registered),
                "Trying to unregister an already registered image");
+    if (Common::MemoryAttribution::Enabled()) {
+        if constexpr (requires { image.AllocationBytes(); }) {
+            attribution_images.Unregister(image, 0, 0);
+        } else {
+            attribution_images.Unregister(
+                image, ImageAllocationBytes(image),
+                image.HasScaled() ? GetScaledImageSizeBytes(image) : 0);
+        }
+    }
     image.flags &= ~ImageFlagBits::Registered;
     image.flags &= ~ImageFlagBits::BadOverlap;
     lru_cache.Free(image.lru_index);
@@ -4834,18 +4914,31 @@ void TextureCache<P>::DeleteImage(ImageId image_id, bool immediate_delete) {
         slot_image_views.erase(image_view_id);
         BumpImageViewGeneration(image_view_id);
     }
-    const bool retained = RetainPendingImageDownloads(image_id, slot_images[image_id],
-                                                       uncommitted_downloads, committed_downloads);
+    const bool track_attr = Common::MemoryAttribution::Enabled();
+    const AttributionImageSize attr_size =
+        track_attr ? AttributionSizeOf(slot_images[image_id]) : AttributionImageSize{};
+    const bool retained = RetainPendingImageDownloads(
+        image_id, slot_images[image_id], uncommitted_downloads, committed_downloads,
+        track_attr ? attribution_images.RetainedDownloadCounter() : nullptr, attr_size.bytes);
     if (retained) {
+        if (track_attr) {
+            attribution_images.MarkRetainedDownload(attr_size);
+        }
         LOG_INFO(Render_Vulkan, "Retained image for queued download: id={}", image_id.Value());
     } else if (!immediate_delete) {
         if constexpr (requires { runtime.CurrentTick(); }) {
-            gpu_sentenced_images.push_back(
-                {runtime.CurrentTick(), freed_bytes, std::move(slot_images[image_id])});
+            gpu_sentenced_images.push_back({runtime.CurrentTick(), freed_bytes, attr_size.bytes,
+                                            std::move(slot_images[image_id])});
             gpu_sentenced_bytes += freed_bytes;
+            if (track_attr) {
+                attribution_images.SentenceGpu(attr_size);
+            }
         } else {
             sentenced_images.Push(std::move(slot_images[image_id]));
             sentenced_image_bytes[sentenced_image_index] += freed_bytes;
+            if (track_attr) {
+                attribution_images.SentenceRing(sentenced_image_index, attr_size);
+            }
         }
     }
     slot_images.erase(image_id);

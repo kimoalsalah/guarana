@@ -134,6 +134,11 @@ public:
 
     [[nodiscard]] DriverBlobCounts Counts() const;
 
+    [[nodiscard]] u64 IndexSize() const {
+        std::scoped_lock lock{mutex};
+        return static_cast<u64>(index.size());
+    }
+
     /// Writes the queued blobs, and compacts the file when it is due (see DriverBlobOptions). Find
     /// gives nothing afterwards. Destruction calls it.
     void Close();

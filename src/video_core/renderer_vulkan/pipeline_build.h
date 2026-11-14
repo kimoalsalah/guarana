@@ -43,6 +43,10 @@ public:
 
     explicit QueuedIrBudget(u64 budget_) : budget{budget_} {}
 
+    [[nodiscard]] u64 QueuedBytes() const noexcept {
+        return queued->load(std::memory_order_relaxed);
+    }
+
     /// Null when `bytes` don't fit beside the IR queued now
     std::unique_ptr<Reservation> TryReserve(u64 bytes) {
         u64 current = queued->load(std::memory_order_relaxed);

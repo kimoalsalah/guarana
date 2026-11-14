@@ -3,10 +3,12 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <unordered_set>
 #include <cstddef>
 #include <utility>
+#include "common/common_types.h"
 #include "common/slot_vector.h"
 
 namespace VideoCommon {
@@ -41,12 +43,25 @@ size_t DeduplicatePendingImageDownloads(Downloads& downloads, Common::SlotVector
 // consumed. Keep the actual image, including its metadata, until those finish.
 template <class Image, class Downloads, class Batches>
 bool RetainPendingImageDownloads(Common::SlotId id, Image& image, Downloads& pending,
-                                 Batches& submitted) {
+                                 Batches& submitted, std::atomic<u64>* retained_bytes = nullptr,
+                                 u64 image_bytes = 0) {
     std::shared_ptr<Image> retained;
     const auto retain = [&](auto& downloads) {
         for (auto& download : downloads) {
             if (!download.is_swizzle || download.object_id != id || download.retired_image) continue;
-            if (!retained) retained = std::make_shared<Image>(std::move(image));
+            if (!retained) {
+                if (retained_bytes != nullptr && image_bytes != 0) {
+                    retained_bytes->fetch_add(image_bytes, std::memory_order_relaxed);
+                    retained = std::shared_ptr<Image>(
+                        new Image(std::move(image)),
+                        [retained_bytes, image_bytes](Image* ptr) noexcept {
+                            retained_bytes->fetch_sub(image_bytes, std::memory_order_relaxed);
+                            delete ptr;
+                        });
+                } else {
+                    retained = std::make_shared<Image>(std::move(image));
+                }
+            }
             download.retired_image = retained;
         }
     };

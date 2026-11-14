@@ -6,6 +6,7 @@
 
 #include "common/assert.h"
 #include "common/cityhash.h"
+#include "common/memory_attribution.h"
 #include "common/zstd_compression.h"
 #include "shader_recompiler/exception.h"
 #include "video_core/renderer_vulkan/vk_shader_reuse.h"
@@ -312,10 +313,18 @@ void ShaderReuseCache::Add(const ShaderTranslationKey& key,
     if (known) {
         return;
     }
+    if (Common::MemoryAttribution::Enabled()) {
+        attribution_spirv_bytes += shaders->SpirvBytes();
+    }
     entry.variants.push_back(std::move(shaders));
     if (++num_shaders > MaxShaders) {
         EvictLeastRecentlyUsed();
     }
+}
+
+std::pair<u64, u64> ShaderReuseCache::AttributionStats() const {
+    std::scoped_lock lock{mutex};
+    return {static_cast<u64>(num_shaders), attribution_spirv_bytes};
 }
 
 void ShaderReuseCache::EvictLeastRecentlyUsed() {
@@ -330,6 +339,13 @@ void ShaderReuseCache::EvictLeastRecentlyUsed() {
     boost::unordered::erase_if(entries, [this, threshold](const auto& pair) {
         if (pair.second.last_use >= threshold) {
             return false;
+        }
+        if (Common::MemoryAttribution::Enabled()) {
+            for (const auto& variant : pair.second.variants) {
+                const u64 bytes = variant->SpirvBytes();
+                attribution_spirv_bytes =
+                    attribution_spirv_bytes >= bytes ? attribution_spirv_bytes - bytes : 0;
+            }
         }
         num_shaders -= pair.second.variants.size();
         return true;

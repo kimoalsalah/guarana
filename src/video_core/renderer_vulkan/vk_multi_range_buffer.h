@@ -61,6 +61,13 @@ public:
 
     void TickFrame(Scheduler& scheduler);
 
+    [[nodiscard]] u64 LiveGatheredBytes() const noexcept {
+        return live_gathered_bytes;
+    }
+    [[nodiscard]] u64 RetiredGatheredBytes() const noexcept {
+        return retired_gathered_bytes;
+    }
+
     VkDeviceSize block_size{DEFAULT_BLOCK_SIZE};
     bool use_sparse{};
 
@@ -69,6 +76,7 @@ private:
         SparseBuffer handle;
         vk::Buffer gathered;
         u64 tick{};
+        u64 gathered_bytes{};
     };
 
     struct Entry {
@@ -80,6 +88,7 @@ private:
         u64 geometry{};
         u64 content{};
         bool dirty{true};
+        u64 gathered_bytes{};
     };
 
     [[nodiscard]] u64 HashSources(std::span<const MultiRangeSource> sources) const;
@@ -102,6 +111,8 @@ private:
     boost::container::static_vector<Retired, MAX_RETIRED> retired;
     u32 sparse_memory_type_bits{};
     VkBufferUsageFlags sparse_usage{};
+    u64 live_gathered_bytes{};
+    u64 retired_gathered_bytes{};
 };
 
 } // namespace Vulkan

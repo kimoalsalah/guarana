@@ -72,6 +72,12 @@ public:
     /// Bytes Map, Unmap and Protect have covered since start.
     static u64 MappedBytes() noexcept;
 
+    /// EDEN_NX2_MEMORY_ATTRIBUTION: backing bytes committed/materialized in the host OS (nullopt
+    /// where the OS backing cannot be queried cheaply), and 64 KiB granules ever handed out to the
+    /// guest kernel via MarkUsed.
+    [[nodiscard]] std::optional<u64> CommittedBytes() const noexcept;
+    [[nodiscard]] u64 HandedOutBytes() const noexcept;
+
     /// Pages the kernel hands out (cleared or not).
     void MarkUsed(size_t physical_offset, size_t length);
 
@@ -138,10 +144,12 @@ private:
     static constexpr u8 GranuleDirty = 1 << 1;  ///< May hold non-zero data
     std::unique_ptr<std::atomic<u8>[]> granules;
     size_t num_granules{};
+    std::atomic<u64> used_granule_bytes{};
     // Windows requires it for kernels whom lack proper support for some functions!
     bool fallback_buffer{false};
     /// Windows, EDEN_NX2_LAZY_GUEST_COMMIT: the backing is committed as MarkUsed hands it out.
     bool lazy_commit{false};
+    bool track_attribution{false};
 };
 
 } // namespace Common

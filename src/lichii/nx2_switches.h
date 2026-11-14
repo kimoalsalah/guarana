@@ -13,6 +13,7 @@
 
 #include "common/fs/fs_paths.h"
 #include "common/fs/path_util.h"
+#include "common/memory_attribution.h"
 #include "common/switch_origin.h"
 
 // The NX2 switches are read from the environment (EDEN_NX2_*), which a GUI launch has no way to
@@ -172,4 +173,7 @@ static void LoadNx2Switches(const char* argv0) {
 #endif
         Common::SwitchOrigin::RecordSetByProcess(name);
     }
+    // Latch process-wide switches whose accounting must stay immutable across every HostMemory and
+    // GPU owner for the lifetime of the process.
+    (void)Common::MemoryAttribution::Enabled();
 }

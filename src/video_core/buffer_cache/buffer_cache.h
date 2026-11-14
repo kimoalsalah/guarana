@@ -19,6 +19,7 @@
 #include <vector>
 #include <fmt/ranges.h>
 
+#include "common/memory_attribution.h"
 #include "common/memory_detect.h"
 #include "common/range_sets.inc"
 #include "video_core/buffer_cache/buffer_cache_base.h"
@@ -220,6 +221,11 @@ void BufferCache<P>::TickFrame() {
     }
     ++frame_tick;
     delayed_destruction_ring.Tick();
+    if (Common::MemoryAttribution::Enabled()) {
+        attribution_sentenced_index = (attribution_sentenced_index + 1) % TICKS_TO_DESTROY;
+        const u64 cleared = std::exchange(attribution_sentenced_bytes[attribution_sentenced_index], 0);
+        attribution_sentenced_total -= (std::min)(attribution_sentenced_total, cleared);
+    }
 
     // Pages draws wrote: their early downloads, now that the frame's work is recorded.
     VideoCore::AsyncReadback::Add(VideoCore::AsyncReadback::g_counters.early_pages_frame,
@@ -4382,7 +4388,14 @@ void BufferCache<P>::DeleteBuffer(BufferId buffer_id, bool do_not_mark) {
 #ifdef LICHII_LEGACY
     if (!do_not_mark || !immediately_free)
 #endif
+    {
+        if (Common::MemoryAttribution::Enabled()) {
+            const u64 retired_bytes = slot_buffers[buffer_id].SizeBytes();
+            attribution_sentenced_bytes[attribution_sentenced_index] += retired_bytes;
+            attribution_sentenced_total += retired_bytes;
+        }
         delayed_destruction_ring.Push(std::move(slot_buffers[buffer_id]));
+    }
 
     slot_buffers.erase(buffer_id);
 }

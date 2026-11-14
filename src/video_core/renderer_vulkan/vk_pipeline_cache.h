@@ -51,6 +51,10 @@ namespace Core {
 class System;
 }
 
+namespace Common::MemoryAttribution {
+struct Report;
+}
+
 namespace Shader::IR {
 struct Program;
 }
@@ -150,6 +154,8 @@ public:
     [[nodiscard]] GraphicsPipeline* CurrentGraphicsPipeline();
 
     void TickFrame();
+
+    void FillMemoryAttribution(Common::MemoryAttribution::Report& report) const;
 
     [[nodiscard]] ComputePipeline* CurrentComputePipeline(u64& native_key);
 
@@ -488,7 +494,7 @@ private:
     /// One save of the driver pipeline cache at a time (they share a temporary file), and what
     /// its file holds: the cache's size as the driver gave it and Device::PipelineCacheBuilds
     /// when the file was read or written
-    std::mutex vulkan_cache_save_mutex;
+    mutable std::mutex vulkan_cache_save_mutex;
     size_t saved_cache_size{};
     u64 saved_cache_builds{};
     size_t pipelines_since_flush{};

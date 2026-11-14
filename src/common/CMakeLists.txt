@@ -103,6 +103,8 @@ add_library(
     lz4_compression.cpp
     lz4_compression.h
     math_util.h
+    memory_attribution.cpp
+    memory_attribution.h
     memory_detect.cpp
     memory_detect.h
     multi_level_page_table.cpp

@@ -42,6 +42,10 @@ public:
         return store.Counts();
     }
 
+    [[nodiscard]] u64 IndexSize() const {
+        return store.IndexSize();
+    }
+
     /// One log line with the counts so far; `when` names the point of the session
     void LogCounts(std::string_view when) const;
 
