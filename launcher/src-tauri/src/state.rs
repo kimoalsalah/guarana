@@ -49,6 +49,10 @@ pub struct Persisted {
     /// Windows notifications when shaders are ready or an update is installed (off by default).
     #[serde(default)]
     pub notifications: bool,
+    #[serde(default)]
+    pub auto_report_off: bool,
+    #[serde(default)]
+    pub auto_report: Option<crate::types::ReportResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

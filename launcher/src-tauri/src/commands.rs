@@ -369,3 +369,18 @@ pub async fn set_booster_level(app: AppHandle, level: u8) -> CmdResult<booster::
 pub async fn booster_undo_all(app: AppHandle) -> CmdResult<booster::BoosterStatus> {
     blocking(&app, |app| booster::undo_all(app)).await?
 }
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_auto_report(app: AppHandle) -> CmdResult<report::AutoStatus> {
+    blocking(&app, report::auto_status).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dismiss_auto_report(app: AppHandle) -> CmdResult<report::AutoStatus> {
+    blocking(&app, |app| report::auto_update(app, None)).await?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_auto_report(app: AppHandle, enabled: bool) -> CmdResult<report::AutoStatus> {
+    blocking(&app, move |app| report::auto_update(app, Some(enabled))).await?
+}

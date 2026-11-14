@@ -11,7 +11,7 @@ import { whenIdle } from "../motion";
 import { go, type ScreenContext, type ScreenDef } from "../router";
 import { lastSession } from "../sessions";
 import { launcher, library, profiles, warmStatus } from "../state";
-import type { BoosterStatus, Game, LauncherState, ModeId, ModeStatus, Profile, ShareStatus, UpdateInfo, WarmResult } from "../types";
+import type { AutoReportStatus, BoosterStatus, Game, LauncherState, ModeId, ModeStatus, Profile, ShareStatus, UpdateInfo, WarmResult } from "../types";
 import { badge, busy, button, card, segmented, skeleton, spinner, switchControl } from "../ui/controls";
 import { controllersCard } from "../ui/controllers-card";
 import { heroArt } from "../ui/hero-art";
@@ -89,17 +89,29 @@ const screen: ScreenDef = {
       boosterSlot,
       h("div", { class: "home-grid" }, controllersCard(ctx.signal), setupSlot),
     );
-    const el = h("div", { class: "home" }, heroSlot, shareSlot, modeSlot, libSection, pcSection);
+    const el = h("div", { class: "home" }, autoReportCard(ctx), heroSlot, shareSlot, modeSlot, libSection, pcSection);
 
     const exited = ctx.params.exited as { code: number; seconds: number; title: string } | undefined;
     if (exited) {
-      setTimeout(() => {
-        if (exited.code === 0) toast(`Welcome back. You played ${duration(exited.seconds)} of ${exited.title}.`, { tone: "ok" });
-        else
+      let announced = false;
+      let delayPassed = false;
+      const showExit = (st: AutoReportStatus | null) => {
+        if (ctx.signal.aborted || announced || !delayPassed || st?.capturing) return;
+        announced = true;
+        if (st?.report) return; // The ready card is the sole notice for this crash.
+        if (exited.code === 0) {
+          toast(`Welcome back. You played ${duration(exited.seconds)} of ${exited.title}.`, { tone: "ok" });
+        } else {
           toast(`${exited.title} closed unexpectedly (exit code ${exitCode(exited.code)}).`, {
             tone: "fail",
             action: { label: "Report it", run: () => void go("report", { params: { kind: "crash" } }) },
           });
+        }
+      };
+      void events.autoReportChanged(showExit, ctx.signal).catch(() => undefined);
+      setTimeout(() => {
+        delayPassed = true;
+        void api.getAutoReport().then(showExit, () => showExit(null));
       }, 500);
     }
 
@@ -434,6 +446,32 @@ async function shareNow(): Promise<void> {
   await api.shareDismiss();
 }
 
+function autoReportCard(ctx: ScreenContext): HTMLElement {
+  let current: AutoReportStatus["report"] = null;
+  const later = button("Not now", { kind: "ghost", onClick: () => void api.dismissAutoReport().then(show).catch((e: unknown) => toast(errorText(e), { tone: "fail" })) });
+  const send = button("Send report", { kind: "secondary", onClick: (_e, self) => {
+    const report = current;
+    if (!report) return;
+    void busy(self, async () => {
+      await api.openPath(report.zip_path);
+      await api.openUrl(report.issue_url);
+      show(await api.dismissAutoReport());
+      toast("Review the issue on GitHub and attach the ZIP, then submit.", { tone: "info" });
+    }).catch((e: unknown) => toast(errorText(e), { tone: "fail" }));
+  } });
+  const el = h("section", { class: "card share-card", hidden: true, "aria-label": "Crash report" },
+    h("p", { role: "status", text: "The game stopped unexpectedly. A report is ready." }),
+    h("p", { class: "fine", text: "Saved on this PC. Send report opens the file and a prefilled GitHub issue for you to review and attach it. Nothing is sent automatically." }),
+    h("div", { class: "row" }, send, later));
+  function show(st: AutoReportStatus): void {
+    if (ctx.signal.aborted) return;
+    current = st.report;
+    el.hidden = !current;
+  }
+  void events.autoReportChanged(show, ctx.signal).then(() => api.getAutoReport().then(show)).catch(() => undefined);
+  return el;
+}
+
 function shareCard(ctx: ScreenContext): HTMLElement {
   const text = h("p", { class: "share-text", role: "status" });
   const fine = h("p", { class: "fine", text: "Nothing is sent. Your browser opens GitHub's device report with these numbers filled in. You add the scene and a screenshot, read it, and press Submit yourself." });
@@ -518,6 +556,15 @@ function modeCard(ctx: ScreenContext): HTMLElement {
   });
   void api.getShareStatus().then((st) => shareToggle.setAttribute("aria-checked", String(st.enabled)), () => undefined);
   void events.shareChanged((st) => shareToggle.setAttribute("aria-checked", String(st.enabled)), ctx.signal).catch(() => undefined);
+  const reportToggle = switchControl({
+    checked: true,
+    label: "Prepare crash reports automatically",
+    onChange: (on) => void api.setAutoReport(on).then((st) => reportToggle.setAttribute("aria-checked", String(st.enabled))).catch((e: unknown) => {
+      toast(errorText(e), { tone: "fail" });
+      void api.getAutoReport().then((st) => reportToggle.setAttribute("aria-checked", String(st.enabled)));
+    }),
+  });
+  void api.getAutoReport().then((st) => reportToggle.setAttribute("aria-checked", String(st.enabled)), () => undefined);
   const notifyToggle = switchControl({
     checked: false,
     label: "Windows notifications",
@@ -552,6 +599,10 @@ function modeCard(ctx: ScreenContext): HTMLElement {
         h("div", { class: "toggle-control" }, apToggle),
       ),
       historyList,
+      h("div", { class: "toggle-row" }, h("div", { class: "toggle-text" },
+        h("p", { class: "toggle-label", text: "Prepare crash reports automatically" }),
+        h("p", { class: "toggle-help", text: "Keep the last five scrubbed reports on this PC after an unexpected stop. Nothing is sent until you choose Send report." })),
+        h("div", { class: "toggle-control" }, reportToggle)),
       h(
         "div",
         { class: "toggle-row" },

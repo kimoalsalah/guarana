@@ -123,6 +123,7 @@ pub fn launch(
     profile_id: Option<String>,
     timeline: Timeline,
 ) -> CmdResult<LaunchResult> {
+    let session_guard = crate::report::SessionGuard::acquire()?;
     let st = app.state::<AppState>();
     let persisted = st.load();
     let current = state::current_version(&persisted).ok_or("Guarana is not installed yet")?;
@@ -225,6 +226,8 @@ pub fn launch(
     // Game Booster (Off by default). The GPU preference must be set before the emulator starts, so
     // it and the journal go down now; priority and throttling come after the process exists, and the
     // one elevated step after the game-watch thread does. It never fails the launch.
+    let session_started = std::time::SystemTime::now();
+    let before_dump = crate::report::dump_stamp();
     let booster_level = crate::booster::level_of(&persisted);
     let booster_prep = crate::booster::apply_before_spawn(&exe, booster_level);
     if booster_prep.is_some() {
@@ -270,10 +273,16 @@ pub fn launch(
     let boot_done = Arc::new(AtomicBool::new(false));
     let exit_done = boot_done.clone();
     let boot_out = if had_game { child.stdout.take() } else { None };
+    let reached = Arc::new(AtomicBool::new(false));
+    let boot_thread = boot_out.and_then(|out| boot::follow(app, out, boot_done.clone(), reached.clone(), timeline));
     std::thread::Builder::new()
         .name("game-watch".into())
         .spawn(move || {
             let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+            if let Some(finished) = boot_thread {
+                // A descendant may inherit stdout; never hold the launcher on its open pipe.
+                let _ = finished.recv_timeout(std::time::Duration::from_secs(2));
+            }
             drop(pad_guard);
             let seconds = started.elapsed().as_secs_f64();
             timeline.mark(&format!("process exited with {code}"));
@@ -281,6 +290,7 @@ pub fn launch(
             // Taken before the event, while the emulator's window may still be the last one active.
             let foreground = boot::foreground_pid();
             log::info!("Guarana (pid {pid}) exited with {code} after {seconds:.0} s");
+            let reached_now = reached.load(Ordering::Relaxed) || crate::report::reached_game_since(session_started);
             let _ = app2.emit(EXITED_EVENT, GameExited { code, seconds });
             if had_game {
                 // Back to the launcher at once; to the front only if the player was not in another app.
@@ -300,13 +310,15 @@ pub fn launch(
                 crate::booster::restore_after_session(&app2);
             }
             warm::resume_if_interrupted(&app2);
+            if had_game {
+                crate::report::start_after_exit(&app2, code, reached_now, follow_boot, before_dump, session_guard);
+            } else {
+                drop(session_guard);
+            }
         })
         .ctx("Could not watch the game")?;
     // After the game-watch thread exists, so `boot_done` is always set when the process ends.
     if had_game {
-        if let Some(out) = boot_out {
-            boot::follow(app, out, boot_done.clone(), timeline);
-        }
         boot::watch_foreground(app, pid, boot_done, timeline);
     }
 

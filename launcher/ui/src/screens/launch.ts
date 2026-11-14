@@ -132,18 +132,22 @@ const screen: ScreenDef = {
       focusFirst(actions);
     };
 
-    const onExit = (e: GameExited) => {
+    const onExit = async (e: GameExited) => {
       if (!game || phase === "done" || phase === "failed") return;
       clearTimeout(holdTimer);
       const early = phase === "starting" || phase === "handoff" || e.seconds < 10;
       setPaused("game", false);
       setPadSuspended(false);
       if (game.title_id) recordSession(game.title_id, e.seconds);
-      if (e.code !== 0 && early) {
-        fail(`${game.title} closed while starting (exit code ${exitCode(e.code)}). The log is in the report.`);
-        return;
-      }
       phase = "done";
+      if (e.code !== 0 && early) {
+        const report = await api.getAutoReport().catch(() => null);
+        if (ctx.signal.aborted) return;
+        if (!report?.report && !report?.capturing) {
+          fail(`${game.title} closed while starting (exit code ${exitCode(e.code)}). The log is in the report.`);
+          return;
+        }
+      }
       void go("home", { transition: "return", reset: true, params: { exited: { code: e.code, seconds: e.seconds, title: game.title } } });
     };
 

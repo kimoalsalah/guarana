@@ -509,3 +509,41 @@ elevated silently; the check offers it only when the file is found, else `open_v
 `open_display_settings`, `open_windows_security`, `delete_shader_tmp`,
 `open_bluetooth_settings`. `apply_fix` returns the check run again; `install_update` streams
 `install://progress` like `install_version`.
+
+## Automatic crash reports
+
+`get_auto_report` returns `{ enabled: boolean, capturing: boolean, report: ReportResult | null }`
+(the same `zip_path`, `issue_url`, `summary_md` as `collect_report`). `dismiss_auto_report`
+clears the notice, keeping the ZIP. `set_auto_report { enabled }` saves the setting and clears
+the notice. Changes and capture completion (including failure) emit `report://changed` with
+the same status. Commands use snake_case arguments. `capturing` holds fallback exit messaging
+until the pending capture finishes; disabling capture makes it false immediately.
+
+Automatic capture defaults on (`auto_report_off`, default false, in `launcher-state.json`),
+controlled from Home > Advanced. Nonzero exit, a new/changed `eden_crash.dmp`, or an observable
+exit before the first frame triggers the existing crash collector. Missing boot evidence is
+only treated as failure when stdout boot observation was supported (`follows_boot`); a clean
+legacy/nightly exit with no evidence remains normal. The stdout reader gets up to two seconds
+to finish; the fresh log's last session can also provide first-frame/shown-frame evidence.
+An old dump alone does not trigger capture. Dumps are inspected only for metadata and never
+attached. No capture runs when no game was requested.
+
+The launcher returns, restores the booster and resumes warm-up before starting the dedicated
+`auto-report` thread. Its session guard prevents another game launch overwriting the captured
+session's logs. Home shows one ready card for a successful capture; if capture is off or fails,
+the existing early failure screen or crash toast with Report it remains available.
+
+Reports use the same text-only allowlist, ZIP structure and scrubber as manual reports. The
+shared scrubber also protects absolute Windows paths outside the profile, including apostrophes,
+and preserves HTTPS URLs. This shared change also applies to manual reports, Share my numbers,
+and Ask AI. Unquoted path fields conservatively lose trailing text on that line. Quoted paths
+preserve text after the closing double quote.
+
+The newest five automatic ZIPs are kept under `%LOCALAPPDATA%\Guarana\reports\automatic`;
+manual reports are unaffected. A completed report is announced before retention runs, so a
+locked old ZIP cannot hide the new notice. Retention errors are logged and can temporarily
+leave more than five ZIPs. The pending report is persisted across launcher restarts.
+Home offers controller-focusable Send report and Not now buttons. Send report opens Explorer
+and the prefilled issue URL; the player attaches the ZIP and submits on GitHub. Capture makes
+no network request. The browser mock's `crash=1` exercises capture and the ready card; turning
+the Advanced setting off exercises the original failure UI.

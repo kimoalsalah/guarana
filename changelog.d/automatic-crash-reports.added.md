@@ -1,0 +1,1 @@
+- Launcher: prepare a scrubbed local report after an unexpected game stop, keep the latest five, and offer Send report or Not now. Automatic capture can be disabled in Advanced ([#179](https://github.com/karimalsalah/guarana/issues/179)).

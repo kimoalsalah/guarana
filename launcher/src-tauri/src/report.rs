@@ -16,6 +16,18 @@ use crate::types::{Form, ReportResult, SystemInfo, Vendor};
 use crate::util::{self, CmdResult, Context};
 use crate::{locate, paths, system};
 
+static SESSION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub struct SessionGuard;
+impl SessionGuard {
+    pub fn acquire() -> CmdResult<Self> {
+        SESSION.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst)
+            .map(|_| Self).map_err(|_| "A game session is running or its report is being prepared".to_string())
+    }
+}
+impl Drop for SessionGuard {
+    fn drop(&mut self) { SESSION.store(false, std::sync::atomic::Ordering::SeqCst); }
+}
+
 pub const ISSUES: &str = "https://github.com/karimalsalah/guarana/issues/new";
 pub const MAX_URL: usize = 7000;
 const LOG_HEAD: u64 = 256 << 10;
@@ -98,7 +110,28 @@ impl Scrubber {
     }
 
     pub fn apply(&self, text: &str) -> String {
-        self.rules.iter().fold(text.to_string(), |t, (needle, repl, whole)| replace_ci(&t, needle, repl, *whole))
+        let text = text.to_string();
+        // Logs can name personal folders outside the user profile. Redact through the end of
+        // the field (including spaces), conservatively sacrificing the rest of an unquoted line.
+        let bytes = text.as_bytes();
+        let mut out = String::new();
+        let (mut i, mut last) = (0, 0);
+        while i < bytes.len() {
+            let drive = i + 2 < bytes.len() && bytes[i].is_ascii_alphabetic()
+                && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric())
+                && bytes[i + 1] == b':' && matches!(bytes[i + 2], b'/' | b'\\')
+                && !(bytes[i + 2] == b'/' && bytes.get(i + 3) == Some(&b'/'));
+            let unc = i + 1 < bytes.len() && bytes[i] == b'\\' && bytes[i + 1] == b'\\';
+            if drive || unc {
+                out.push_str(&text[last..i]);
+                out.push_str("%PATH%");
+                i += if drive { 3 } else { 2 };
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r' | b'"' | b'<' | b'>') { i += 1; }
+                last = i;
+            } else { i += 1; }
+        }
+        out.push_str(&text[last..]);
+        self.rules.iter().fold(out, |t, (needle, repl, whole)| replace_ci(&t, needle, repl, *whole))
     }
 }
 
@@ -310,7 +343,15 @@ pub fn issue_url_limit(template: &str, title: &str, mut fields: Vec<(&'static st
     url
 }
 
+fn write_report_text<W: Write + Seek>(zip: &mut zip::ZipWriter<W>, scrub: &Scrubber, text: &str) -> CmdResult<()> {
+    zip.write_all(scrub.apply(text).as_bytes()).ctx("Could not write the report")
+}
+
 pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<ReportResult> {
+    collect_in(app, kind, note, &paths::reports_dir())
+}
+
+fn collect_in(app: &AppHandle, kind: &str, note: Option<String>, dir: &Path) -> CmdResult<ReportResult> {
     if !matches!(kind, "bug" | "performance" | "crash") {
         return Err(format!("Unknown report kind {kind}: use bug, performance or crash"));
     }
@@ -324,16 +365,15 @@ pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<R
         .unwrap_or_else(|| "not installed".into());
     let profile = persisted.profile_id.clone().unwrap_or_else(|| "none".into());
 
-    let dir = paths::reports_dir();
     fs::create_dir_all(&dir).ctx("Could not create the reports folder")?;
-    let zip_name = format!("guarana-report-{}.zip", util::stamp());
+    let zip_name = format!("guarana-report-{}-{:020}.zip", util::stamp(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos());
     let zip_path = dir.join(&zip_name);
     let file = File::create(&zip_path).ctx("Could not create the report")?;
     let mut zip = zip::ZipWriter::new(file);
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let mut add = |name: &str, text: &str| -> CmdResult<()> {
         zip.start_file(name, opts).ctx("Could not write the report")?;
-        zip.write_all(text.as_bytes()).ctx("Could not write the report")
+        write_report_text(&mut zip, &scrub, text)
     };
 
     let mut last_game: Option<String> = None;
@@ -343,22 +383,22 @@ pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<R
             if last_game.is_none() && name == "eden_log.txt" {
                 last_game = last_booted_title(&text);
             }
-            add(&format!("logs/{name}"), &scrub.apply(&text))?;
+            add(&format!("logs/{name}"), &text)?;
         }
     }
     if let Some(text) = read_log(&paths::kept_game_log()) {
         if last_game.is_none() {
             last_game = last_booted_title(&text);
         }
-        add("logs/eden_log.last-game.txt", &scrub.apply(&text))?;
+        add("logs/eden_log.last-game.txt", &text)?;
     }
     if let Some(text) = read_log(&paths::launcher_log()) {
-        add("logs/launcher.log", &scrub.apply(&text))?;
+        add("logs/launcher.log", &text)?;
     }
     let sys_json = serde_json::to_string_pretty(&sys).map_err(|e| e.to_string())?;
-    add("system.json", &scrub.apply(&sys_json))?;
+    add("system.json", &sys_json)?;
     if let Ok(text) = fs::read_to_string(paths::user_switches()) {
-        add("settings/nx2_switches.txt", &scrub.apply(&text))?;
+        add("settings/nx2_switches.txt", &text)?;
     }
     // Only [Renderer] of qt-config.ini: other sections hold paths and account fields.
     if let Ok(text) = fs::read_to_string(paths::qt_config()) {
@@ -373,7 +413,7 @@ pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<R
                 inside
             })
             .collect();
-        add("settings/qt-config-renderer.ini", &scrub.apply(&renderer.join("\r\n")))?;
+        add("settings/qt-config-renderer.ini", &renderer.join("\r\n"))?;
     }
     let game_label = last_game.as_deref().map(|id| {
         let title = persisted.games.iter().find(|g| g.title_id.eq_ignore_ascii_case(id)).map(|g| g.title.clone());
@@ -392,7 +432,8 @@ pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<R
     let game = game_choice(last_game.as_deref());
     let os_major = if sys.os.build >= 22000 { "Windows 11" } else { "Windows 10" };
     let first_line: String = note.lines().next().unwrap_or("").chars().take(60).collect();
-    let logs_text = format!("Attach {zip_name} from %LOCALAPPDATA%\\Guarana\\reports (the launcher made it; user and PC names are removed).");
+    let subfolder = if dir.file_name().is_some_and(|n| n == "automatic") { "\\automatic" } else { "" };
+    let logs_text = format!("Attach {zip_name} from %LOCALAPPDATA%\\Guarana\\reports{subfolder} (the launcher made it; user and PC names are removed).");
     let issue_url = match kind {
         "performance" => {
             let gpu_name = sys.primary().map(|g| g.name.clone()).unwrap_or_default();
@@ -450,6 +491,109 @@ pub fn collect(app: &AppHandle, kind: &str, note: Option<String>) -> CmdResult<R
     };
     log::info!("Report written to {}", zip_path.display());
     Ok(ReportResult { zip_path: zip_path.to_string_lossy().into_owned(), issue_url, summary_md })
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AutoStatus {
+    pub enabled: bool,
+    pub capturing: bool,
+    pub report: Option<ReportResult>,
+}
+
+pub fn auto_status(app: &AppHandle) -> AutoStatus {
+    let saved = app.state::<AppState>().load();
+    AutoStatus {
+        enabled: !saved.auto_report_off,
+        capturing: !saved.auto_report_off && SESSION.load(std::sync::atomic::Ordering::SeqCst),
+        report: saved.auto_report.filter(|r| Path::new(&r.zip_path).is_file()),
+    }
+}
+
+pub fn auto_update(app: &AppHandle, enabled: Option<bool>) -> CmdResult<AutoStatus> {
+    app.state::<AppState>().update(|s| {
+        if let Some(on) = enabled { s.auto_report_off = !on; }
+        s.auto_report = None;
+    })?;
+    let status = auto_status(app);
+    use tauri::Emitter;
+    let _ = app.emit("report://changed", &status);
+    Ok(status)
+}
+
+fn abnormal(code: i32, reached_game: bool, new_dump: bool, can_observe: bool) -> bool {
+    code != 0 || new_dump || (can_observe && !reached_game)
+}
+
+// Metadata only. Dumps contain private memory and never enter a report.
+fn log_reached_game(text: &str) -> bool {
+    let last = text.rsplit("Booting game:").next().unwrap_or("");
+    last.contains("frontend: first guest frame presented") || last.contains("Nx2Boot event=first_frame")
+        || last.contains("Shown frames:")
+}
+
+pub fn reached_game_since(started: std::time::SystemTime) -> bool {
+    let path = paths::emulator_log_dir().join("eden_log.txt");
+    fs::metadata(&path).and_then(|m| m.modified()).is_ok_and(|m| m >= started)
+        && read_log(&path).is_some_and(|text| log_reached_game(&text))
+}
+
+pub fn dump_stamp() -> Option<(std::time::SystemTime, u64)> {
+    let m = fs::metadata(paths::emulator_log_dir().join("eden_crash.dmp")).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+fn cap_reports(dir: &Path) -> CmdResult<()> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir).ctx("Could not read automatic reports")? {
+        let entry = entry.ctx("Could not read automatic report")?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if entry.file_type().ctx("Could not inspect automatic report")?.is_file()
+            && name.starts_with("guarana-report-") && name.ends_with(".zip") {
+            files.push(entry.path());
+        }
+    }
+    files.sort();
+    let remove = files.len().saturating_sub(5);
+    for path in files.into_iter().take(remove) {
+        fs::remove_file(path).ctx("Could not remove old automatic report")?;
+    }
+    Ok(())
+}
+
+pub fn start_after_exit(
+    app: &AppHandle, code: i32, reached_game: bool, can_observe: bool,
+    before_dump: Option<(std::time::SystemTime, u64)>, guard: SessionGuard,
+) {
+    let app2 = app.clone();
+    let spawned = std::thread::Builder::new().name("auto-report".into()).spawn(move || {
+        after_exit(&app2, code, reached_game, can_observe, before_dump);
+        drop(guard);
+        use tauri::Emitter;
+        let _ = app2.emit("report://changed", auto_status(&app2));
+    });
+    if let Err(e) = spawned {
+        log::warn!("Could not start automatic capture: {e}");
+        use tauri::Emitter;
+        let _ = app.emit("report://changed", auto_status(app));
+    }
+}
+
+fn after_exit(app: &AppHandle, code: i32, reached_game: bool, can_observe: bool, before_dump: Option<(std::time::SystemTime, u64)>) {
+    let new_dump = dump_stamp().is_some_and(|now| Some(now) != before_dump);
+    if !abnormal(code, reached_game, new_dump, can_observe) || app.state::<AppState>().load().auto_report_off { return; }
+    let dir = paths::reports_dir().join("automatic");
+    let note = format!("The game stopped unexpectedly (exit code {code}, game reached: {reached_game}, new crash dump: {new_dump}).");
+    let result = (|| -> CmdResult<()> {
+        let report = collect_in(app, "crash", Some(note), &dir)?;
+        app.state::<AppState>().update(|s| {
+            if !s.auto_report_off { s.auto_report = Some(report); }
+        })?;
+        use tauri::Emitter;
+        let _ = app.emit("report://changed", auto_status(app));
+        if let Err(e) = cap_reports(&dir) { log::warn!("Could not trim automatic reports: {e}"); }
+        Ok(())
+    })();
+    if let Err(e) = result { log::warn!("Automatic report failed: {e}"); }
 }
 
 // ---- Ask AI ---------------------------------------------------------------------------------------
@@ -560,6 +704,65 @@ pub fn ask_ai(app: &AppHandle, service: &str, issues: &[String], question: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boot_evidence_uses_only_the_last_session() {
+        assert!(!log_reached_game("Booting game: A\nNx2Boot event=first_frame\nBooting game: B\nloading"));
+        assert!(log_reached_game("Booting game: A\nNx2Boot event=first_frame"));
+        assert!(!log_reached_game("Booting game: A\nloading"));
+    }
+
+    #[test]
+    fn paths_with_apostrophes_are_private_and_urls_survive() {
+        let scrub = Scrubber::for_names("O'Brien", "TEST-PC");
+        let text = scrub.apply("C:\\Users\\O'Brien\\Documents\\x\nD:\\Games\\Link's Awakening\\save");
+        assert!(!text.contains("Brien") && !text.contains("Awakening"));
+        for url in ["https://github.com/a/b 12ms", "see x-https://example.com/a 12ms", "s://example.com/a"] {
+            assert_eq!(scrub.apply(url), url);
+        }
+        assert_eq!(scrub.apply("path=\"D:\\Private Folder\\file\" 12ms"), "path=\"%PATH%\" 12ms");
+        let head = format!("Read {DOCS_URL} . My setup:");
+        let (_, prompt) = fit_chat_url("https://chatgpt.com/?q=", &head, &[scrub.apply("see https://example.com/docs")], "why?");
+        assert!(prompt.contains(DOCS_URL) && prompt.contains("https://example.com/docs"));
+    }
+
+    #[test]
+    fn automatic_exit_decision() {
+        assert!(!abnormal(0, false, false, false), "unobservable clean exit");
+        assert!(abnormal(0, false, false, true), "observable exit before first frame");
+        assert!(abnormal(1, false, false, false), "failed start on a legacy build");
+        assert!(abnormal(-1073741819, true, false, true), "crashed after reaching game");
+        assert!(abnormal(0, true, true, false), "new dump despite clean exit code");
+        assert!(!abnormal(0, true, false, true), "normal observed session");
+    }
+
+    #[test]
+    fn automatic_reports_keep_five_and_leave_other_files() {
+        let dir = std::env::temp_dir().join(format!("guarana-auto-cap-{}-{}", std::process::id(), util::stamp()));
+        fs::create_dir_all(&dir).unwrap();
+        for n in 0..8 { fs::write(dir.join(format!("guarana-report-{n:02}.zip")), b"synthetic").unwrap(); }
+        fs::write(dir.join("manual.zip"), b"synthetic").unwrap();
+        cap_reports(&dir).unwrap();
+        cap_reports(&dir).unwrap();
+        for n in 0..8 { assert_eq!(dir.join(format!("guarana-report-{n:02}.zip")).exists(), n >= 3); }
+        assert!(dir.join("manual.zip").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn automatic_entry_writer_scrubs_every_text() {
+        let scrub = Scrubber::for_names("TestPlayer", "TEST-PC");
+        let cursor = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(cursor);
+        zip.start_file("logs/synthetic.txt", SimpleFileOptions::default()).unwrap();
+        write_report_text(&mut zip, &scrub, "TEST-PC TestPlayer opened D:\\Private Folder\\example.bin\nC:\\Users\\TestPlayer\\log.txt").unwrap();
+        let mut archive = zip::ZipArchive::new(zip.finish().unwrap()).unwrap();
+        assert_eq!(archive.len(), 1);
+        let mut text = String::new();
+        archive.by_index(0).unwrap().read_to_string(&mut text).unwrap();
+        assert!(!text.contains("TestPlayer") && !text.contains("TEST-PC") && !text.contains("Private Folder"));
+        assert!(!text.contains("example.bin") && text.contains("%PATH%"));
+    }
 
     #[test]
     fn chat_links_fit_and_name_the_docs() {

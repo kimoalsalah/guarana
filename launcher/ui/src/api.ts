@@ -2,7 +2,7 @@
 // Inside Tauri it uses @tauri-apps/api v2; in a plain browser it loads the mock backend.
 
 import type {
-  AppliedProfile, BootProgress, Channel, Check, Controller, Found, Game, GameExited, ImportResult, InstallResult,
+  AutoReportStatus, AppliedProfile, BootProgress, Channel, Check, Controller, Found, Game, GameExited, ImportResult, InstallResult,
   LaunchArgs, LauncherState, Overrides, Profile, Progress, Report, ReportKind, SystemInfo, UpdateInfo,
   WarmProgress, WarmResult, AiService, AskAiResult, ModeId, ModeStatus, StopResult, Credits, ShareStatus, ShareLink,
   LaunchRequest, Notifications, BoosterStatus,
@@ -77,6 +77,9 @@ async function on<T>(name: string, handler: (payload: T) => void, signal?: Abort
 }
 
 export const api = {
+  getAutoReport: () => call<AutoReportStatus>("get_auto_report"),
+  dismissAutoReport: () => call<AutoReportStatus>("dismiss_auto_report"),
+  setAutoReport: (enabled: boolean) => call<AutoReportStatus>("set_auto_report", { enabled }),
   detectSystem: () => call<SystemInfo>("detect_system"),
   listProfiles: () => call<Profile[]>("list_profiles"),
   getState: () => call<LauncherState>("get_state"),
@@ -141,6 +144,7 @@ export const api = {
 };
 
 export const events = {
+  autoReportChanged: (h: (p: AutoReportStatus) => void, signal?: AbortSignal) => on<AutoReportStatus>("report://changed", h, signal),
   locateProgress: (h: (p: Progress) => void, signal?: AbortSignal) => on<Progress>("locate://progress", h, signal),
   doctorProgress: (h: (p: Progress) => void, signal?: AbortSignal) => on<Progress>("doctor://progress", h, signal),
   installProgress: (h: (p: Progress) => void, signal?: AbortSignal) => on<Progress>("install://progress", h, signal),

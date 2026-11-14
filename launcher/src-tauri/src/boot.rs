@@ -163,8 +163,9 @@ impl Tracker {
 /// Reads the session output on its own thread until the emulator exits (it stops writing once the
 /// game is shown, but keeps the pipe open), and emits `game://boot`. It reads to the end even after
 /// the last event: the emulator writes with blocking calls, so a full pipe would hold it up.
-pub fn follow(app: &AppHandle, out: impl Read + Send + 'static, done: Arc<AtomicBool>, timeline: Timeline) {
+pub fn follow(app: &AppHandle, out: impl Read + Send + 'static, done: Arc<AtomicBool>, reached: Arc<AtomicBool>, timeline: Timeline) -> Option<std::sync::mpsc::Receiver<()>> {
     let app = app.clone();
+    let (finished, receiver) = std::sync::mpsc::channel();
     let spawned = std::thread::Builder::new().name("game-boot".into()).spawn(move || {
         let mut reader = BufReader::new(out);
         let mut tracker = Tracker::default();
@@ -182,6 +183,9 @@ pub fn follow(app: &AppHandle, out: impl Read + Send + 'static, done: Arc<Atomic
                 if phases.is_new(&progress.phase) {
                     timeline.mark(&format!("boot phase {}", phase_text(&progress)));
                 }
+                if progress.phase == Phase::FirstFrame.name() || progress.phase == Phase::Shown.name() {
+                    reached.store(true, Ordering::Relaxed);
+                }
                 if progress.phase == Phase::Shown.name() {
                     log::info!("The game is on screen");
                     done.store(true, Ordering::Relaxed);
@@ -189,10 +193,12 @@ pub fn follow(app: &AppHandle, out: impl Read + Send + 'static, done: Arc<Atomic
                 let _ = app.emit(BOOT_EVENT, progress);
             }
         }
+        let _ = finished.send(());
     });
     // Without the thread the pipe closes, and the emulator stops writing on its first failure.
-    if let Err(e) = spawned {
-        log::warn!("Could not follow the boot: {e}");
+    match spawned {
+        Ok(_) => Some(receiver),
+        Err(e) => { log::warn!("Could not follow the boot: {e}"); None }
     }
 }
 

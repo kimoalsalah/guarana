@@ -273,6 +273,10 @@ export function createMockBackend(): Backend {
   let shareOn = true;
   let sharePrompt = true;
   let notifications = false;
+  let autoReportEnabled = true;
+  let autoReport: Report | null = null;
+  let autoReportCapturing = false;
+  const autoReportStatus = () => ({ enabled: autoReportEnabled, capturing: autoReportEnabled && autoReportCapturing, report: autoReport });
   // guarana://launch/<id> (open=<id>): the backend's open.rs checks it against the library.
   const opened = sc.open ? allGames.find((g) => g.title_id.toLowerCase() === sc.open?.toLowerCase()) : undefined;
   let launchRequest: LaunchRequest | null = sc.open
@@ -756,6 +760,18 @@ export function createMockBackend(): Backend {
       launchRequest = null;
       return r;
     },
+    async get_auto_report() { return autoReportStatus(); },
+    async dismiss_auto_report() {
+      autoReport = null;
+      emit("report://changed", autoReportStatus());
+      return autoReportStatus();
+    },
+    async set_auto_report(a) {
+      autoReportEnabled = a.enabled === true;
+      autoReport = null;
+      emit("report://changed", autoReportStatus());
+      return autoReportStatus();
+    },
     async get_notifications() {
       return { enabled: notifications } satisfies Notifications;
     },
@@ -835,7 +851,19 @@ export function createMockBackend(): Backend {
           boosterActive = false;
           emit("booster://changed", boosterStatus());
         }
+        autoReportCapturing = sc.crash && autoReportEnabled;
         emit("game://exited", exited);
+        if (autoReportCapturing) void sleep(1400).then(() => {
+          if (autoReportEnabled && !sc.fail) {
+            autoReport = {
+              zip_path: `${HOME}\\AppData\\Local\\Guarana\\reports\\automatic\\guarana-report-mock.zip`,
+              issue_url: "https://github.com/karimalsalah/guarana/issues/new?template=crash.yml&title=%5BCrash%5D%20Mock",
+              summary_md: "Synthetic crash report. User paths removed; nothing was sent.",
+            };
+          }
+          autoReportCapturing = false;
+          emit("report://changed", autoReportStatus());
+        });
         // The session runs once the game is on screen (after the boot above).
       }, sc.crash ? 1400 : sc.session * 1000 + (sc.boot === "session" ? 5100 : sc.boot === "old" ? 1200 : 0) * sc.speed);
       return { pid: 23816, follows_boot: sc.boot === "session" };

@@ -391,3 +391,5 @@ export interface ShareLink {
   /** Every field as plain text, for the clipboard. */
   text: string;
 }
+
+export interface AutoReportStatus { enabled: boolean; capturing: boolean; report: Report | null; }

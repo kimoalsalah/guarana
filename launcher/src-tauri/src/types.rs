@@ -397,7 +397,7 @@ pub struct BootProgress {
     pub total: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportResult {
     pub zip_path: String,
     pub issue_url: String,
