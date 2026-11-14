@@ -37,6 +37,11 @@ size_t GetNumArgsOf(Opcode op) noexcept;
 Type GetArgTypeOf(Opcode op, size_t arg_index) noexcept;
 std::string_view GetNameOf(Opcode op) noexcept;
 
+/// Experimental x64 read-modify-writes, including their deoptimization exit.
+constexpr bool IsLseMemoryAccess(const Opcode op) noexcept {
+    return op >= Opcode::A64LseAdd8 && op <= Opcode::A64LseCas64;
+}
+
 /// @brief Determines whether or not this instruction performs an arithmetic shift.
 constexpr bool IsArithmeticShift(const Opcode op) noexcept {
     return op == Opcode::ArithmeticShiftRight32
@@ -168,12 +173,12 @@ constexpr bool IsExclusiveMemoryWrite(const Opcode op) noexcept {
 
 /// @brief Determines whether or not this instruction performs any kind of memory read.
 constexpr bool IsMemoryRead(const Opcode op) noexcept {
-    return IsSharedMemoryRead(op) || IsExclusiveMemoryRead(op);
+    return IsSharedMemoryRead(op) || IsExclusiveMemoryRead(op) || IsLseMemoryAccess(op);
 }
 
 /// @brief Determines whether or not this instruction performs any kind of memory write.
 constexpr bool IsMemoryWrite(const Opcode op) noexcept {
-    return IsSharedMemoryWrite(op) || IsExclusiveMemoryWrite(op);
+    return IsSharedMemoryWrite(op) || IsExclusiveMemoryWrite(op) || IsLseMemoryAccess(op);
 }
 
 /// @brief Determines whether or not this instruction performs any kind of memory access.

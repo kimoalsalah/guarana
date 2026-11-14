@@ -56,6 +56,8 @@ enum class OptimizationFlag : std::uint32_t {
     /// result in unexpected behaviour in multithreaded scenarios, including but not limited
     /// to data races and deadlocks.
     Unsafe_IgnoreGlobalMonitor = 0x00100000,
+    /// Experimental x64 LSE lowering. Explicit opt-in, outside all_safe_optimizations.
+    Experimental_LseHostAtomics = 0x00200000,
 };
 
 constexpr OptimizationFlag no_optimizations = static_cast<OptimizationFlag>(0);

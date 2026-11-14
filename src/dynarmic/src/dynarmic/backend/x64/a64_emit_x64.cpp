@@ -9,6 +9,8 @@
 #include "dynarmic/backend/x64/a64_emit_x64.h"
 
 #include <algorithm>
+#include <vector>
+#include <boost/icl/interval_set.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include "common/assert.h"
@@ -268,10 +270,29 @@ void A64EmitX64::ClearCache() {
     block_ranges.ClearCache();
     ClearFastDispatchTable();
     fastmem_patch_info.clear();
+    lse_disabled_pcs.clear();
 }
 
 void A64EmitX64::InvalidateCacheRanges(const boost::icl::interval_set<u64>& ranges) {
     InvalidateBasicBlocks(block_ranges.InvalidateRanges(ranges));
+    std::vector<u64> retry_pcs;
+    for (auto& [pc, pending_deoptimization] : lse_disabled_pcs) {
+        const bool invalidated = std::any_of(ranges.begin(), ranges.end(), [pc](const auto& interval) {
+            return boost::icl::first(interval) <= pc && pc <= boost::icl::last(interval);
+        });
+        if (!invalidated) {
+            continue;
+        }
+        if (pending_deoptimization) {
+            // Keep the fallback for the replay that this invalidation requests.
+            pending_deoptimization = false;
+        } else {
+            retry_pcs.push_back(pc);
+        }
+    }
+    for (const u64 pc : retry_pcs) {
+        lse_disabled_pcs.erase(pc);
+    }
 }
 
 void A64EmitX64::ClearFastDispatchTable() {

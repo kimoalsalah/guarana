@@ -409,6 +409,256 @@ void A64EmitX64::EmitA64ExclusiveWriteMemory128(A64EmitContext& ctx, IR::Inst* i
     }
 }
 
+template<size_t operation, size_t bitsize>
+void A64EmitX64::EmitLseAtomic(A64EmitContext& ctx, IR::Inst* inst) {
+    ASSERT(UseLseHostAtomics());
+    auto args = ctx.reg_alloc.GetArgumentInfo(inst);
+    ctx.reg_alloc.ScratchGpr(code, HostLoc::RAX);
+    const auto address = ctx.reg_alloc.UseGpr(code, args[1]);
+    const auto source = ctx.reg_alloc.UseGpr(code, args[2]);
+    const auto pointer_tmp = ctx.reg_alloc.ScratchGpr(code);
+    const auto abort = ctx.GenSharedLabel();
+    const auto narrow = [](Xbyak::Reg64 reg) {
+        if constexpr (bitsize == 8) {
+            return reg.cvt8();
+        } else if constexpr (bitsize == 16) {
+            return reg.cvt16();
+        } else if constexpr (bitsize == 32) {
+            return reg.cvt32();
+        } else {
+            return reg;
+        }
+    };
+
+    if constexpr (bitsize > 8) {
+        code.test(address, u32(bitsize / 8 - 1));
+        code.jnz(*abort, code.T_NEAR);
+    }
+    bool require_abort_handling = false;
+    const auto pointer = EmitFastmemVAddr(code, ctx, *abort, address,
+                                        require_abort_handling, pointer_tmp);
+    const auto memory = [&] {
+        if constexpr (bitsize == 8) {
+            return code.byte[pointer];
+        } else if constexpr (bitsize == 16) {
+            return code.word[pointer];
+        } else if constexpr (bitsize == 32) {
+            return code.dword[pointer];
+        } else {
+            return code.qword[pointer];
+        }
+    }();
+    const DoNotFastmemMarker marker{ctx.Location(), inst->GetName()};
+    const void* atomic_location;
+    const void* load_location = nullptr;
+
+    if constexpr (operation == 0 || operation == 8) {
+        code.mov(rax, source);
+        atomic_location = code.getCurr();
+        if constexpr (operation == 0) {
+            code.lock();
+            code.xadd(memory, narrow(rax));
+        } else {
+            code.xchg(memory, narrow(rax));
+        }
+    } else if constexpr (operation == 9) {
+        const auto desired = ctx.reg_alloc.UseGpr(code, args[3]);
+        code.mov(rax, source);
+        atomic_location = code.getCurr();
+        code.lock();
+        code.cmpxchg(memory, narrow(desired));
+    } else {
+        const auto candidate = ctx.reg_alloc.ScratchGpr(code);
+        load_location = EmitReadMemoryMov<bitsize>(code, rax.getIdx(), pointer, false);
+        Xbyak::Label retry;
+        code.L(retry);
+        if constexpr (operation != 1) {
+            code.mov(candidate, rax);
+        }
+        if constexpr (operation == 1) {
+            code.mov(candidate, source);
+            code.not_(candidate);
+            code.and_(candidate, rax);
+        } else if constexpr (operation == 2) {
+            code.xor_(candidate, source);
+        } else if constexpr (operation == 3) {
+            code.or_(candidate, source);
+        } else {
+            Xbyak::Label keep;
+            code.cmp(narrow(rax), narrow(source));
+            if constexpr (operation == 4) {
+                code.jge(keep);
+            } else if constexpr (operation == 5) {
+                code.jle(keep);
+            } else if constexpr (operation == 6) {
+                code.jae(keep);
+            } else {
+                static_assert(operation == 7);
+                code.jbe(keep);
+            }
+            code.mov(candidate, source);
+            code.L(keep);
+        }
+        // Even a no-op must perform the write access and the locked barrier.
+        atomic_location = code.getCurr();
+        code.lock();
+        code.cmpxchg(memory, narrow(candidate));
+        code.jne(retry);
+    }
+    code.ZeroExtendFrom(bitsize, rax);
+    ctx.reg_alloc.DefineValue(code, inst, rax);
+
+    const A64::LocationDescriptor location{IR::LocationDescriptor{inst->GetArg(0).GetU64()}};
+    const u64 prior_cycles = (location.PC() - ctx.Location().PC()) / 4;
+    ColdEmits(code, ctx).emplace_back([=, this] {
+        code.L(*abort);
+        // No atomic completed. Re-enter the original translation at this PC after
+        // a range invalidation, with host LSE disabled only at this guest PC.
+        code.mov(rax, location.PC());
+        code.mov(qword[code.ABI_JIT_PTR + offsetof(A64JitState, pc)], rax);
+        if (conf.enable_cycle_counting && prior_cycles != 0) {
+            EmitAddCycles(prior_cycles);
+        }
+        code.mov(code.ABI_PARAM1, reinterpret_cast<u64>(this));
+        code.mov(code.ABI_PARAM2, location.PC());
+        code.CallLambda([](A64EmitX64* emitter, u64 pc) {
+            emitter->lse_disabled_pcs.insert_or_assign(pc, true);
+            emitter->jit_interface->InvalidateCacheRange(pc, 4);
+        });
+        code.ForceReturnFromRunCode();
+
+        // The exception handler synthesizes a call. Return immediately into the
+        // same deoptimization exit used by the explicit alignment/range guards.
+        const auto trampoline = code.getCurr<void (*)()>();
+        code.ret();
+        AddFastmemPatch(atomic_location, abort->getAddress(), trampoline, marker, false);
+        if (load_location) {
+            AddFastmemPatch(load_location, abort->getAddress(), trampoline, marker, false);
+        }
+    });
+}
+
+void A64EmitX64::EmitA64LseAdd8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<0, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseAdd16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<0, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseAdd32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<0, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseAdd64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<0, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseClr8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<1, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseClr16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<1, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseClr32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<1, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseClr64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<1, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseEor8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<2, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseEor16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<2, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseEor32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<2, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseEor64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<2, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSet8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<3, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSet16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<3, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSet32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<3, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSet64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<3, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmax8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<4, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmax16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<4, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmax32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<4, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmax64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<4, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmin8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<5, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmin16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<5, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmin32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<5, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSmin64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<5, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmax8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<6, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmax16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<6, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmax32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<6, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmax64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<6, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmin8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<7, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmin16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<7, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmin32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<7, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseUmin64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<7, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSwp8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<8, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSwp16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<8, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSwp32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<8, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseSwp64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<8, 64>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseCas8(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<9, 8>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseCas16(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<9, 16>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseCas32(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<9, 32>(ctx, inst);
+}
+void A64EmitX64::EmitA64LseCas64(A64EmitContext& ctx, IR::Inst* inst) {
+    EmitLseAtomic<9, 64>(ctx, inst);
+}
+
 void A64EmitX64::EmitCheckMemoryAbort(A64EmitContext&, IR::Inst* inst, Xbyak::Label* end) {
     if (!conf.check_halt_on_memory_access) {
         return;

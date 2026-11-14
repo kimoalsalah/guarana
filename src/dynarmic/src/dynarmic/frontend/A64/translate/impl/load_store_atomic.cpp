@@ -85,6 +85,12 @@ bool TranslatorVisitor::AtomicMemOp(Imm<2> size, bool A, bool R, Reg Rs, Imm<4> 
     }
 
     const IR::U64 address = AtomicAddress(*this, Rn);
+    if (options.lse_host_atomics && options.lse_host_atomics(ir.PC())) {
+        const IR::U64 source = AtomicZeroExtendReg(*this, Rs, bytes);
+        X(64, Rt, ir.LseAtomic(opv, size.ZeroExtend<size_t>(), address, source, ir.Imm64(0)));
+        return true;
+    }
+
     const IR::AccType acctype = AtomicAccType(A, R);
     const IR::U64 old = AtomicLoadZext(*this, address, bytes, acctype);
     const IR::U64 s = AtomicZeroExtendReg(*this, Rs, bytes);
@@ -137,6 +143,13 @@ bool TranslatorVisitor::LDAPR_sz(Imm<2> size, Reg Rn, Reg Rt) {
 bool TranslatorVisitor::CompareAndSwap(Imm<2> size, bool L, Reg Rs, bool o0, Reg Rn, Reg Rt) {
     const size_t bytes = size_t{1} << size.ZeroExtend<size_t>();
     const IR::U64 address = AtomicAddress(*this, Rn);
+    if (options.lse_host_atomics && options.lse_host_atomics(ir.PC())) {
+        const IR::U64 expected = AtomicZeroExtendReg(*this, Rs, bytes);
+        const IR::U64 desired = AtomicZeroExtendReg(*this, Rt, bytes);
+        X(64, Rs, ir.LseAtomic(9, size.ZeroExtend<size_t>(), address, expected, desired));
+        return true;
+    }
+
     const IR::AccType acctype = AtomicAccType(L, o0);
 
     const IR::U64 old = AtomicLoadZext(*this, address, bytes, acctype);

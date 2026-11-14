@@ -38,6 +38,9 @@ struct TranslationOptions {
     /// If this is false, we treat the instruction as a NOP.
     /// If this is true, we emit an ExceptionRaised instruction.
     bool hook_hint_instructions = true;
+
+    /// Only the x64 fastmem backend implements the experimental LSE opcodes.
+    std::function<bool(u64)> lse_host_atomics = {};
 };
 
 /**

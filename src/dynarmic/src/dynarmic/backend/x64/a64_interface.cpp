@@ -9,6 +9,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include <boost/icl/interval_set.hpp>
 #include "common/assert.h"
@@ -280,7 +281,11 @@ private:
         // LocationDescriptor ctor() does important ops (like tflags) do not skip
         auto const arch_descriptor = A64::LocationDescriptor{descriptor};
         ir_block.Reset(arch_descriptor);
-        A64::Translate(ir_block, arch_descriptor, get_code, {conf.define_unpredictable_behaviour, conf.wall_clock_cntpct});
+        A64::TranslationOptions options{conf.define_unpredictable_behaviour, conf.wall_clock_cntpct};
+        if (!arch_descriptor.SingleStepping() && emitter.UseLseHostAtomics()) {
+            options.lse_host_atomics = [this](u64 pc) { return emitter.UseLseHostAtomicsAt(pc); };
+        }
+        A64::Translate(ir_block, arch_descriptor, get_code, std::move(options));
         Optimization::Optimize(ir_block, conf, polyfill_options);
         if (conf.counters) {
             ++conf.counters->blocks_compiled;
