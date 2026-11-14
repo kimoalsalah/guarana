@@ -67,6 +67,14 @@ public:
         REQUIRE(mprotect(data + DataAddress, 0x10000, PROT_READ) == 0);
 #endif
     }
+    void ProtectDataNone() {
+#ifdef _WIN32
+        DWORD old_protection;
+        REQUIRE(VirtualProtect(data + DataAddress, 0x10000, PAGE_NOACCESS, &old_protection) != 0);
+#else
+        REQUIRE(mprotect(data + DataAddress, 0x10000, PROT_NONE) == 0);
+#endif
+    }
     u8* data = nullptr;
 };
 
@@ -353,6 +361,50 @@ TEST_CASE("A64: LSE host atomics match exclusive lowering", "[a64][lse]") {
                 CHECK(result.registers[operation == 9 ? 1 : 2] == mask);
                 CHECK(changed_runner.env.counters.blocks_compiled == 1);
                 CHECK(baseline_runner.env.counters.blocks_compiled == 2);
+            }
+        }
+    }
+}
+
+TEST_CASE("A64: LSE loop initial load recovers from a host fault", "[a64][lse]") {
+    for (u32 operation = 1; operation <= 7; ++operation) {
+        for (u32 size = 0; size < 4; ++size) {
+            for (u32 ordering = 0; ordering < 4; ++ordering) {
+                CAPTURE(operation, size, ordering);
+                const u64 old = Mask(size);
+                const u64 source = 3;
+                const Result baseline = Execute(operation, size, ordering, old, source, 0, false,
+                                                DataAddress, true, true);
+                Arena arena;
+                std::memcpy(arena.data + DataAddress, &old, size_t{1} << size);
+                Env env{arena};
+                env.code_mem = {Atomic(operation, size, ordering), Svc};
+                env.callback_only = true;
+                env.callback_value = old;
+                arena.ProtectDataNone();
+                ExclusiveMonitor monitor{1};
+                auto config = Config(env, monitor, true);
+                // Production address mode, but a deterministically protected allocation:
+                // no alignment/range guard can replace the initial MOV's host fault.
+                config.fastmem_address_space_bits = 64;
+                config.silently_mirror_fastmem = true;
+                A64::Jit jit{config};
+                env.jit = &jit;
+                jit.SetRegister(0, DataAddress);
+                jit.SetRegister(1, source);
+                jit.SetRegister(2, 0);
+                jit.SetSP(DataAddress);
+                jit.SetPstate(0xA0000000);
+                REQUIRE(RunToSvc(env));
+                CHECK(jit.GetRegisters() == baseline.registers);
+                CHECK(jit.GetPstate() == baseline.flags);
+                CHECK(env.callback_value == baseline.memory);
+                CHECK(env.callback_value == Expected(operation, size, old, source, 0));
+                CHECK(env.writes == 1);
+                CHECK(env.reads >= 1);
+                // Failed native block, old atomic replay, then SVC. No full-cache wipe.
+                CHECK(env.counters.blocks_compiled >= 3);
+                CHECK(env.counters.cache_clears == 0);
             }
         }
     }
